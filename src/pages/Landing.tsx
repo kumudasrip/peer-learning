@@ -177,9 +177,13 @@ export default function Landing() {
             <a href="#community" className="transition hover:text-cyan-400">
               Communities
             </a>
+            <a href="/contributor-dashboard" className="transition hover:text-cyan-400">
+              Contributor Dashboard
+            </a>
             <a href="#faq" className="transition hover:text-cyan-400">
               FAQ
             </a>
+            
           </div>
 
           <div className="flex items-center gap-4">
