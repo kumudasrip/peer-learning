@@ -18,6 +18,7 @@ import Dashboard from "./pages/Dashboard";
 import Discover from "./pages/Discover";
 import Sessions from "./pages/Sessions";
 import Messages from "./pages/Messages";
+import Chat from "./pages/Chat";
 import Login from "./pages/Login";
 import Signup from "./pages/Signup";
 import Profile from "./pages/Profile";
@@ -29,6 +30,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import AIPage from "./pages/aipage";
 import FloatingAI from "./components/FloatingAI";
+import ContributorDashboard from "./pages/ContributorDashboard";
 
 import { supabase } from "./lib/supabase";
 import BecomeMentor from "./pages/BecomeMentor";
@@ -213,6 +215,17 @@ function App() {
               />
 
               <Route
+                path="/chat"
+                element={
+                  <ProtectedRoute>
+                    <WithNav>
+                      <Chat />
+                    </WithNav>
+                  </ProtectedRoute>
+                }
+              />
+
+              <Route
                 path="/notifications"
                 element={
                   <ProtectedRoute>
@@ -264,6 +277,15 @@ function App() {
               />
 
               <Route path="*" element={<NotFound />} />
+
+              <Route
+                path="/contributor-dashboard"
+                element={
+                    <WithNav>
+                      <ContributorDashboard />
+                    </WithNav>
+                }
+              />
 
             </Routes>
 
