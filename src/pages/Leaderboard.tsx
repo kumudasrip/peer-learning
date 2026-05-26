@@ -117,13 +117,12 @@ const Leaderboard = () => {
 
         setMyEntry(enrichedEntry);
 
-        // Count how many users have MORE XP than the current user = rank - 1
-        const { count: usersAbove } = await supabase
-          .from("leaderboard" as any)
-          .select("*", { count: "exact", head: true })
-          .gt("xp", myData.xp);
+        // Fetch user's exact rank via RPC to avoid pulling data
+        const { data: rpcRank } = await supabase.rpc("get_user_rank", {
+          p_user_id: user.id,
+        });
 
-        setMyRank((usersAbove || 0) + 1);
+        setMyRank(rpcRank || 0);
       } else {
         setMyEntry(null);
         setMyRank(0);
