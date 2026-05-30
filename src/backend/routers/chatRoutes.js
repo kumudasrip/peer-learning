@@ -135,11 +135,22 @@ router.post(
       ? [{ role: "system", content: String(systemPrompt) }, ...messages]
       : messages;
 
+    // Validate temperature before forwarding. OpenRouter accepts values in
+    // [0, 2]. Values outside this range are rejected by the upstream API with
+    // a 422 error that surfaces as an opaque 500 to the client. Clamp the
+    // value server-side so the response is always a predictable 400.
+    const tempNum = typeof temperature === "number" ? temperature : parseFloat(temperature);
+    if (Number.isNaN(tempNum) || tempNum < 0 || tempNum > 2) {
+      return res
+        .status(400)
+        .json({ error: "temperature must be a number between 0 and 2 inclusive." });
+    }
+
     const response = await openrouter.chat.completions.create({
       model,
       messages: chatMessages,
       max_tokens: safeMaxTokens,
-      temperature,
+      temperature: tempNum,
     });
 
     res.json({ reply: response.choices[0].message.content });
