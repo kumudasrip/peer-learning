@@ -7,6 +7,8 @@ import {
 
 import { requireAuth, requireProfileRole } from "../middlewares/requireAuth.js";
 import { protectedApiRateLimiter } from "../middlewares/rateLimiter.js";
+import { validate } from "../middlewares/validate.js";
+import { aiSchemas } from "../validation/schemas.js";
 
 const router = express.Router();
 
@@ -18,6 +20,7 @@ router.post(
   requireAuth,
   requireProfileRole("mentor", "learner"),
   protectedApiRateLimiter,
+  validate(aiSchemas.askAI),
   askAI
 );
 
@@ -29,6 +32,7 @@ router.post(
   requireAuth,
   requireProfileRole("mentor", "learner"),
   protectedApiRateLimiter,
+  validate(aiSchemas.generateSessionSummary),
   generateSessionSummary
 );
 

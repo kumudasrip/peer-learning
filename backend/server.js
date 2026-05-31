@@ -1,18 +1,8 @@
 import dotenv from "dotenv";
-// import authRoutes from "./routers/authRoutes.js";
-// import chatRoutes from "./routers/chatRoutes.js";  // 👈 ADD THIS
-// import aiRoutes from "./routers/aiRoutes.js";
-import express from "express";
 import mongoose from "mongoose";
+import app from "./app.js";
 
 dotenv.config(); // must be first
-import authRoutes from "./routers/authRoutes.js";
-import chatRoutes from "./routers/chatRoutes.js";
-import aiRoutes from "./routers/aiRoutes.js";
-
-const app = express();
-app.set("trust proxy", 1);
-app.use(express.json());
 const PORT = process.env.PORT || 5000;
 
 const mongoUri = process.env.MONGO_URI || process.env.MONGODB_URI;
@@ -28,13 +18,6 @@ if (mongoUri) {
 } else {
   console.warn("MONGO_URI is not configured; auth routes will fail until it is set.");
 }
-app.use("/api/ai", aiRoutes);
-app.use("/api", authRoutes);
-app.use("/api", chatRoutes);
-
-// app.use("/api/ai", aiRoutes);
-// app.use("/api", authRoutes);
-// app.use("/api", chatRoutes); // 👈 ADD THIS
 
 console.log("SUPABASE_URL:", process.env.SUPABASE_URL);
 console.log("SUPABASE_ANON_KEY:", process.env.SUPABASE_ANON_KEY?.slice(0, 15) + "...");

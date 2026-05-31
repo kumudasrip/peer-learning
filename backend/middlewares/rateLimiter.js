@@ -1,3 +1,5 @@
+import { HttpError } from "../utils/httpError.js";
+
 const DEFAULT_WINDOW_MS = 60 * 1000;
 const DEFAULT_MAX_REQUESTS = 20;
 
@@ -46,7 +48,8 @@ export const createRateLimiter = ({
     }
 
     if (bucket.count >= maxRequests) {
-      return res.status(429).json({ error: message });
+      next(new HttpError(429, message));
+      return;
     }
 
     bucket.count += 1;
@@ -129,9 +132,8 @@ export const rateLimiter = (req, res, next) => {
   }
 
   if (entry.count >= MAX_REQUESTS) {
-    return res.status(429).json({
-      error: "Too many requests. Please wait before sending more messages.",
-    });
+    next(new HttpError(429, "Too many requests. Please wait before sending more messages."));
+    return;
   }
 
   entry.count += 1;

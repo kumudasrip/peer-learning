@@ -1,14 +1,8 @@
-export const askAI = async (req, res) => {
+import { HttpError } from "../utils/httpError.js";
+
+export const askAI = async (req, res, next) => {
   try {
     const { question } = req.body;
-
-    if (!question || typeof question !== "string") {
-      return res.status(400).json({ error: "Invalid question provided" });
-    }
-
-    if (question.length > 2000) {
-      return res.status(400).json({ error: "Question exceeds maximum length of 2000 characters" });
-    }
 
     const response = await fetch(
       "https://openrouter.ai/api/v1/chat/completions",
@@ -41,21 +35,13 @@ export const askAI = async (req, res) => {
       answer: data.choices[0].message.content,
     });
   } catch (error) {
-    res.status(500).json({
-      error: "AI request failed",
-    });
+    next(error instanceof HttpError ? error : new HttpError(500, "AI request failed"));
   }
 };
 
-export const generateSessionSummary = async (req, res) => {
+export const generateSessionSummary = async (req, res, next) => {
   try {
     const { messages } = req.body;
-
-    if (!Array.isArray(messages) || messages.length === 0) {
-      return res.status(400).json({
-        error: "Messages are required and must be an array",
-      });
-    }
 
     // Limit to the last 100 messages to prevent excessive token usage
     const recentMessages = messages.slice(-100);
@@ -112,10 +98,6 @@ export const generateSessionSummary = async (req, res) => {
 
     res.json(parsed);
   } catch (error) {
-    console.error(error);
-
-    res.status(500).json({
-      error: "Summary generation failed",
-    });
+    next(error instanceof HttpError ? error : new HttpError(500, "Summary generation failed"));
   }
-};
+};

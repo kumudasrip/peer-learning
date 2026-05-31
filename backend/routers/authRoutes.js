@@ -1,5 +1,6 @@
 import express from "express";
 import { forgotPassword, resetPassword } from "../controllers/authController.js";
+import { validate } from "../middlewares/validate.js";
 import {
   forgotPasswordRateLimiter,
   loginRateLimiter,
@@ -7,6 +8,7 @@ import {
   resetPasswordRateLimiter,
   signupRateLimiter,
 } from "../middlewares/rateLimiter.js";
+import { authSchemas } from "../validation/schemas.js";
 
 const router = express.Router();
 
@@ -16,9 +18,19 @@ export const authRouteRateLimiters = {
   otpVerificationRateLimiter,
 };
 
-router.post("/forgot-password", forgotPasswordRateLimiter, forgotPassword);
-router.post("/reset-password/:token", resetPasswordRateLimiter, resetPassword);
-router.post("/login", loginRateLimiter, (req, res) => {
+router.post(
+  "/forgot-password",
+  forgotPasswordRateLimiter,
+  validate(authSchemas.forgotPassword),
+  forgotPassword
+);
+router.post(
+  "/reset-password/:token",
+  resetPasswordRateLimiter,
+  validate(authSchemas.resetPassword),
+  resetPassword
+);
+router.post("/login", loginRateLimiter, validate(authSchemas.login), (req, res) => {
   res.json({ message: "Login route working" });
 });
 

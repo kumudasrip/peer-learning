@@ -1,9 +1,16 @@
 import { createClient } from "@supabase/supabase-js";
+import { HttpError } from "../utils/httpError.js";
 
-const supabaseAdmin = createClient(
-  process.env.SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY
-);
+const getSupabaseAdmin = () => {
+  const supabaseUrl = process.env.SUPABASE_URL;
+  const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+
+  if (!supabaseUrl || !supabaseKey) {
+    return null;
+  }
+
+  return createClient(supabaseUrl, supabaseKey);
+};
 
 /**
  * Express middleware that validates a Supabase JWT from the Authorization header.
@@ -11,17 +18,26 @@ const supabaseAdmin = createClient(
  * Attaches the authenticated user object to req.user on success.
  */
 export const requireAuth = async (req, res, next) => {
+  const supabaseAdmin = getSupabaseAdmin();
+
+  if (!supabaseAdmin) {
+    next(new HttpError(500, "Supabase configuration is missing"));
+    return;
+  }
+
   const authHeader = req.headers.authorization;
 
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
-    return res.status(401).json({ error: "Authentication required" });
+    next(new HttpError(401, "Authentication required"));
+    return;
   }
 
   const token = authHeader.slice(7);
   const { data, error } = await supabaseAdmin.auth.getUser(token);
 
   if (error || !data?.user) {
-    return res.status(401).json({ error: "Invalid or expired session" });
+    next(new HttpError(401, "Invalid or expired session"));
+    return;
   }
 
   req.user = data.user;
@@ -44,8 +60,16 @@ const deriveActiveRoles = (profile) => {
 
 export const requireProfileRole = (...allowedRoles) => async (req, res, next) => {
   try {
+    const supabaseAdmin = getSupabaseAdmin();
+
+    if (!supabaseAdmin) {
+      next(new HttpError(500, "Supabase configuration is missing"));
+      return;
+    }
+
     if (!req.user?.id) {
-      return res.status(401).json({ error: "Authentication required" });
+      next(new HttpError(401, "Authentication required"));
+      return;
     }
 
     const { data: profile, error } = await supabaseAdmin
@@ -56,16 +80,19 @@ export const requireProfileRole = (...allowedRoles) => async (req, res, next) =>
 
     if (error) {
       console.error("Profile authorization error:", error);
-      return res.status(500).json({ error: "Unable to verify account permissions" });
+      next(new HttpError(500, "Unable to verify account permissions"));
+      return;
     }
 
     if (!profile) {
-      return res.status(403).json({ error: "Not authorized to access this resource" });
+      next(new HttpError(403, "Not authorized to access this resource"));
+      return;
     }
 
     const activeRoles = deriveActiveRoles(profile);
     if (allowedRoles.length > 0 && !allowedRoles.some((role) => activeRoles.includes(role))) {
-      return res.status(403).json({ error: "Not authorized to access this resource" });
+      next(new HttpError(403, "Not authorized to access this resource"));
+      return;
     }
 
     req.profile = profile;
@@ -73,6 +100,6 @@ export const requireProfileRole = (...allowedRoles) => async (req, res, next) =>
     next();
   } catch (error) {
     console.error("Profile authorization error:", error);
-    res.status(500).json({ error: "Unable to verify account permissions" });
+    next(new HttpError(500, "Unable to verify account permissions"));
   }
 };
