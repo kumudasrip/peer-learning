@@ -18,7 +18,7 @@ import Navbar from "./components/Navbar";
 import Chatbot from "./components/Chatbot";
 import StreakBadge from "./components/StreakBadge";
 import FloatingAI from "./components/FloatingAI";
-import Sparkles from "./components/Sparkles";
+import MouseSparkles from "./components/MouseSparkles";
 
 import { useAuth } from "@/contexts/useAuth";
 
@@ -72,7 +72,7 @@ function AppContent() {
 
   return (
     <>
-      <Sparkles />
+      <MouseSparkles />
 
 
       <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#020617]"><div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" /></div>}>
