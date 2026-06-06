@@ -48,7 +48,7 @@ export interface AuthContextType {
   retrySyncSessionCookie: () => Promise<void>;
   signUp: (email: string, password: string, name: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signOut: () => Promise<void>;
+  signOut: () => Promise<{ error: Error | null }>;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -239,7 +239,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { error: null };
     } catch (err) {
       console.error("Sign up error:", err);
-      return { error: err as Error };
+      const normalizedError = err instanceof Error ? err : new Error(String(err));
+      return { error: normalizedError };
     }
   };
 
@@ -254,7 +255,8 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
       return { error: null };
     } catch (err) {
       console.error("Sign in error:", err);
-      return { error: err as Error };
+      const normalizedError = err instanceof Error ? err : new Error(String(err));
+      return { error: normalizedError };
     }
   };
 
@@ -266,8 +268,11 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     try {
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      return { error: null };
     } catch (err) {
       console.error("Sign out error:", err);
+      const normalizedError = err instanceof Error ? err : new Error(String(err));
+      return { error: normalizedError };
     }
   };
 
