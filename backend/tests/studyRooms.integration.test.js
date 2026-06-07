@@ -187,7 +187,7 @@ describe('Study Rooms API Integration Tests - Issue #408', () => {
        */
       
       const user = { id: 'user-uuid' };
-      const room = { id: 'room-uuid', is_private: true };
+      const room = { id: 'private-room-uuid', is_private: true };
       
       // Direct insertion as non-creator to private room should fail RLS
       expect(() => {
