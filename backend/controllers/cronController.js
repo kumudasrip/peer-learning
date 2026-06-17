@@ -65,7 +65,7 @@ export const dispatchPushNotifications = async (req, res, next) => {
       .is("push_claimed_at", null)
       .select("id,user_id,title,body,action_url");
 
-    if (claimError) {
+    if (Error) {
       return res.status(500).json({ error: claimError.message });
     }
 
