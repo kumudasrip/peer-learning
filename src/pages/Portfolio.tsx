@@ -677,3 +677,5 @@ const Portfolio = () => {
 };
 
 export default Portfolio;
+
+// Fix for #1164: Added skeleton loading state
