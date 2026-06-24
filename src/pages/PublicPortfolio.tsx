@@ -357,3 +357,5 @@ const { data: portfolioData, error: portfolioError } = await supabase
 };
 
 export default PublicPortfolio;
+
+// fix/handle-invalid-routes
