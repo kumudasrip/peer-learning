@@ -373,7 +373,12 @@ export default function Landing() {
             >
               Cookies Policy
             </Link>
-
+                        <Link
+              to="/terms-and-conditions"
+              className="transition hover:text-cyan-400"
+            >
+              Terms & Conditions
+            </Link>
             <button
               type="button"
               onClick={openPreferences}
