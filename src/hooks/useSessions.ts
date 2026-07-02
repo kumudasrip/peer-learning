@@ -6,10 +6,10 @@ import { API_BASE_URL } from "@/config/api";
 // UI tab labels don't match the DB's session status values, so each tab
 // must be translated to the status (or statuses) it represents before filtering.
 const TAB_TO_STATUS: Record<string, string[]> = {
-    Upcoming: ["scheduled"],
-    Joined: ["live"],
-    Completed: ["ended"],
-  };  
+  Upcoming: ["scheduled"],
+  Joined: ["live"],
+  Completed: ["ended"],
+};
 
 export function useSessions(user: any) {
   const { mutate: awardXP } = useAwardXP();
@@ -55,21 +55,12 @@ export function useSessions(user: any) {
     fetchSessions();
   }, []);
 
-  // Maps UI tab names to the underlying session status values they should include.
-  const TAB_STATUS_MAP: Record<string, string[]> = {
-    upcoming: ["scheduled", "live"],
-    live: ["live"],
-    completed: ["completed"],
-    cancelled: ["cancelled"],
-  };
-
   const filteredSessions = useMemo(() => {
     let filtered = sessions;
 
-    // Use only ONE source of truth: TAB_STATUS_MAP
-    const allowedStatuses = TAB_STATUS_MAP[selectedTab.toLowerCase()] || [selectedTab.toLowerCase()];
+    // Derive allowed statuses from the single source of truth: TAB_TO_STATUS
+    const allowedStatuses = TAB_TO_STATUS[selectedTab] || [];
 
-    // Single filter pass
     filtered = filtered.filter((s) =>
       allowedStatuses.includes(s.status?.toLowerCase())
     );
@@ -85,6 +76,20 @@ export function useSessions(user: any) {
 
     return filtered;
   }, [sessions, selectedTab, search]);
+
+  // Keep the selected session in sync with the active tab/filter.
+  // If the currently selected session isn't in the filtered list anymore
+  // (e.g. the user switched tabs), fall back to the first filtered session,
+  // or clear the selection if the filtered list is empty.
+  useEffect(() => {
+    const stillVisible =
+      selectedSession &&
+      filteredSessions.some((s) => s.id === selectedSession.id);
+
+    if (!stillVisible) {
+      setSelectedSession(filteredSessions.length > 0 ? filteredSessions[0] : null);
+    }
+  }, [filteredSessions, selectedTab, selectedSession]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -245,15 +250,21 @@ export function useSessions(user: any) {
       });
     }
 
-    await (supabase as any)
-      .from("messages")
-      .insert({
-        session_id: selectedSession.id,
-        user_id: user?.id,
-        username: user?.user_metadata?.full_name || "Anonymous",
-        message: msgText,
-      });
-  }, [selectedSession, user]);
+    try {
+      const { error } = await (supabase as any)
+        .from("messages")
+        .insert({
+          session_id: selectedSession.id,
+          user_id: user?.id,
+          username: user?.user_metadata?.full_name || "Anonymous",
+          message: msgText,
+        });
+
+      if (error) throw error;
+    } catch (err: any) {
+      toast({ title: "Failed to send message", description: err.message || "An unexpected error occurred.", variant: "destructive" });
+    }
+  }, [selectedSession, user, toast]);
 
   const sendTypingEvent = useCallback(() => {
     if (channelRef.current) {

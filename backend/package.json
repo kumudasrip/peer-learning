@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "tsx watch server.js",
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "npm --prefix .. run test -- --project backend"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.102.1",
