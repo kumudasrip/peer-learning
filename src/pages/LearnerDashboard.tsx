@@ -49,6 +49,8 @@ const LearnerDashboard = () => {
       return;
     }
 
+    setConnectionStatuses({});
+
     let isMounted = true;
 
     const fetchConnections = async () => {
@@ -155,10 +157,30 @@ const LearnerDashboard = () => {
 
       if (insertError) {
         if (insertError.code === "23505") {
-          setConnectionStatuses((prev) => ({
-            ...prev,
-            [partnerId]: "pending",
-          }));
+          const { data: duplicateConnections, error: duplicateLookupError } =
+            await (supabase as any)
+              .from("peer_connections")
+              .select("status")
+              .or(
+                `and(sender_id.eq.${user.id},receiver_id.eq.${partnerId}),and(sender_id.eq.${partnerId},receiver_id.eq.${user.id})`
+              )
+              .limit(1);
+
+          if (duplicateLookupError) {
+            console.error(
+              "Failed to fetch duplicate peer connection:",
+              duplicateLookupError
+            );
+          } else {
+            const duplicateConnection = duplicateConnections?.[0];
+            if (duplicateConnection?.status) {
+              setConnectionStatuses((prev) => ({
+                ...prev,
+                [partnerId]: duplicateConnection.status,
+              }));
+            }
+          }
+
           toast.info("A connection request already exists.");
           return;
         }
