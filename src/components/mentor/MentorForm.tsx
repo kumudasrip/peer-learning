@@ -294,10 +294,6 @@ export default function MentorForm() {
               }
               className="w-full rounded-2xl border border-white/10 bg-white/5 p-4 outline-none transition focus:border-cyan-400"
             />
-            <input
-              type="file"
-              className="w-full rounded-2xl border border-white/10 bg-white/5 p-4"
-            />
           </div>
         )}
         {/* STEP 4 */}
