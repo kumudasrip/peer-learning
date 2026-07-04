@@ -6,10 +6,10 @@ import { API_BASE_URL } from "@/config/api";
 // UI tab labels don't match the DB's session status values, so each tab
 // must be translated to the status (or statuses) it represents before filtering.
 const TAB_TO_STATUS: Record<string, string[]> = {
-    Upcoming: ["scheduled"],
-    Joined: ["live"],
-    Completed: ["ended"],
-  };  
+  Upcoming: ["scheduled"],
+  Joined: ["live"],
+  Completed: ["ended"],
+};
 
 export function useSessions(user: any) {
   const { mutate: awardXP } = useAwardXP();
@@ -55,28 +55,13 @@ export function useSessions(user: any) {
     fetchSessions();
   }, []);
 
-  // Maps UI tab names to the underlying session status values they should include.
-  const TAB_STATUS_MAP: Record<string, string[]> = {
-    upcoming: ["scheduled", "live"],
-    live: ["live"],
-    completed: ["completed"],
-    cancelled: ["cancelled"],
-  };
-
   const filteredSessions = useMemo(() => {
     let filtered = sessions;
 
-    const allowedStatuses =
-      TAB_STATUS_MAP[selectedTab.toLowerCase()] || [selectedTab.toLowerCase()];
-
+    const allowedStatuses = TAB_TO_STATUS[selectedTab] || [];
     filtered = filtered.filter((s) =>
       allowedStatuses.includes(s.status?.toLowerCase())
     );
-    const allowedStatuses = TAB_TO_STATUS[selectedTab] || [];
-        filtered = filtered.filter((s) =>
-          allowedStatuses.includes(s.status?.toLowerCase())
-        );
-  
 
     if (search) {
       filtered = filtered.filter(
@@ -88,6 +73,33 @@ export function useSessions(user: any) {
 
     return filtered;
   }, [sessions, selectedTab, search]);
+
+  // Keep the selected session in sync with the active tab/filter.
+  // If the currently selected session isn't in the filtered list anymore
+  // (e.g. the user switched tabs), fall back to the first filtered session,
+  // or clear the selection if the filtered list is empty.
+  useEffect(() => {
+    const stillVisible =
+      selectedSession &&
+      filteredSessions.some((s) => s.id === selectedSession.id);
+
+    if (!stillVisible) {
+      setSelectedSession(filteredSessions.length > 0 ? filteredSessions[0] : null);
+    }
+  }, [filteredSessions, selectedTab, selectedSession]);
+
+  // Reset per-session UI state immediately whenever the selected session
+  // changes (or is cleared):
+  // - participantCount: without this, switching sessions can briefly show
+  //   the previous session's headcount until the new session's presence
+  //   sync event comes in and overwrites it with the real number.
+  // - sessionSummary: without this, a summary generated for a previous
+  //   video session can keep showing after switching to a different
+  //   session, making it look like it belongs to the new one.
+  useEffect(() => {
+    setParticipantCount(1);
+    setSessionSummary(null);
+  }, [selectedSession]);
 
   useEffect(() => {
     if (!selectedSession) return;
@@ -115,7 +127,7 @@ export function useSessions(user: any) {
     channelRef.current = roomChannel;
 
     roomChannel
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload: any) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `session_id=eq.${selectedSession.id}` }, (payload: any) => {
         if (payload.new.session_id === selectedSession.id) {
           setMessages((prev) => [...prev, payload.new]);
         }
@@ -221,6 +233,10 @@ export function useSessions(user: any) {
       } else {
         toast({ title: "Success! 🎉", description: "You have joined the session." });
 
+        // Only award XP here, after join_session has actually succeeded and
+        // confirmed the user as a participant. This is the single source of
+        // truth for "session_join" XP — handleJoinVideo must NOT award it,
+        // since opening the video does not by itself confirm participation.
         if (!existingParticipant) {
           awardedSessionsRef.current.add(sessionId);
           awardXP({ activity: "session_join" });
@@ -248,15 +264,21 @@ export function useSessions(user: any) {
       });
     }
 
-    await (supabase as any)
-      .from("messages")
-      .insert({
-        session_id: selectedSession.id,
-        user_id: user?.id,
-        username: user?.user_metadata?.full_name || "Anonymous",
-        message: msgText,
-      });
-  }, [selectedSession, user]);
+    try {
+      const { error } = await (supabase as any)
+        .from("messages")
+        .insert({
+          session_id: selectedSession.id,
+          user_id: user?.id,
+          username: user?.user_metadata?.full_name || "Anonymous",
+          message: msgText,
+        });
+
+      if (error) throw error;
+    } catch (err: any) {
+      toast({ title: "Failed to send message", description: err.message || "An unexpected error occurred.", variant: "destructive" });
+    }
+  }, [selectedSession, user, toast]);
 
   const sendTypingEvent = useCallback(() => {
     if (channelRef.current) {
@@ -309,13 +331,14 @@ export function useSessions(user: any) {
     }
   }, [selectedSession, messages]);
 
+  // NOTE: This no longer awards "session_join" XP. Opening the video call is
+  // not proof of confirmed participation — only a successful `join_session`
+  // RPC call (handled in handleJoinSession) confirms that, so that's the
+  // only place XP is granted. This closes the XP-farming hole where a user
+  // could click "Join Video" without ever clicking "Join Session".
   const handleJoinVideo = useCallback(() => {
     setIsVideoActive(true);
-    if (selectedSession && !awardedSessionsRef.current.has(selectedSession.id)) {
-      awardedSessionsRef.current.add(selectedSession.id);
-      awardXP({ activity: 'session_join' });
-    }
-  }, [awardXP, selectedSession]);
+  }, []);
 
   return {
     sessions,
