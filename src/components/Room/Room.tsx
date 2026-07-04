@@ -21,7 +21,7 @@ export default function Room() {
 
   // We need a ref for setActivities to pass to useRoomPresence since it's initialized after
   const [activities, setActivities] = React.useState<string[]>([]);
-  const { messages, handleSendMessage, fetchMessages } = useRoomChat(id, user, setActivities);
+  const { messages, handleSendMessage, fetchMessages } = useRoomChat(id, user);
   const { participants } = useRoomPresence(id, user, fetchMessages, setActivities);
 
   // Overwrite the chat's setActivities so it can update the feed
@@ -31,8 +31,10 @@ export default function Room() {
 
   // Let's create a combined message handler that updates activities
   const onSendMessage = React.useCallback(async (newMessage: string) => {
-    await handleSendMessage(newMessage);
-    setActivities((prev) => [`You sent a message`, ...prev]);
+    const sent = await handleSendMessage(newMessage);
+    if (sent) {
+      setActivities((prev) => [`You sent a message`, ...prev]);
+    }
   }, [handleSendMessage]);
 
   if (!room)
