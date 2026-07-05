@@ -103,6 +103,7 @@ export function ScheduledSessionCard({
     generateICS(
       session.title ?? "Peer Learning Session",
       session.description ?? "Join us for a collaborative learning session.",
+      session.id,
       dt ?? new Date(),
       session.duration_minutes
     );
