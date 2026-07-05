@@ -3,9 +3,11 @@ import { useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/useAuth";
 import {
+  Point,
   ToolType,
   WhiteboardEvent,
 } from "./types";
+import { nextSegment } from "./strokePath";
 
 type Props = {
   roomId: string;
@@ -22,6 +24,8 @@ export default function Canvas({ roomId }: Props) {
   const strokesRef = useRef<WhiteboardEvent[]>([]);
 
   const currentStrokeId = useRef<string | null>(null);
+
+  const lastPointRef = useRef<Map<string, Point>>(new Map());
 
   const { user } = useAuth();
 
@@ -72,37 +76,26 @@ export default function Canvas({ roomId }: Props) {
   ) => {
     if (event.type === "clear") {
       ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+      lastPointRef.current.clear();
       return;
     }
 
-    const point = event.payload.point;
+    // Draw isolated per-stroke segments so interleaved events never cross strokes.
+    const segment = nextSegment(event, lastPointRef.current);
 
-    if (!point) return;
+    if (!segment) return;
 
-    const drawColor =
+    ctx.strokeStyle =
       event.payload.tool === "eraser"
         ? "#020617"
         : event.payload.color || "#ffffff";
 
-    ctx.strokeStyle = drawColor;
-
     ctx.lineWidth = event.payload.lineWidth || 3;
 
-    if (event.type === "draw-start") {
-      ctx.beginPath();
-
-      ctx.moveTo(point.x, point.y);
-    }
-
-    if (event.type === "draw-move") {
-      ctx.lineTo(point.x, point.y);
-
-      ctx.stroke();
-    }
-
-    if (event.type === "draw-end") {
-      ctx.closePath();
-    }
+    ctx.beginPath();
+    ctx.moveTo(segment.from.x, segment.from.y);
+    ctx.lineTo(segment.to.x, segment.to.y);
+    ctx.stroke();
   };
 
   const replayCanvas = () => {
@@ -111,6 +104,7 @@ export default function Canvas({ roomId }: Props) {
     if (!ctx) return;
 
     ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+    lastPointRef.current.clear();
 
     for (const event of strokesRef.current) {
       drawEvent(ctx, event);
@@ -348,6 +342,8 @@ export default function Canvas({ roomId }: Props) {
     ctx.canvas.width,
     ctx.canvas.height
   );
+
+  lastPointRef.current.clear();
 
   strokesRef.current = [];
 
