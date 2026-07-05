@@ -373,30 +373,33 @@ export type Database = {
           id: string
           title: string
           description: string | null
-          url: string
+          file_url: string
+          file_size: number | null
           tags: string[] | null
           file_type: string
-          user_id: string
+          uploaded_by: string
           created_at: string
         }
         Insert: {
           id?: string
           title: string
           description?: string | null
-          url: string
+          file_url: string
+          file_size?: number | null
           tags?: string[] | null
           file_type: string
-          user_id: string
+          uploaded_by: string
           created_at?: string
         }
         Update: {
           id?: string
           title?: string
           description?: string | null
-          url?: string
+          file_url?: string
+          file_size?: number | null
           tags?: string[] | null
           file_type?: string
-          user_id?: string
+          uploaded_by?: string
           created_at?: string
         }
         Relationships: []
