@@ -342,8 +342,20 @@ CREATE POLICY "Users can view submissions"
 CREATE POLICY "Users can insert submissions" 
   ON public.peer_submissions FOR INSERT WITH CHECK (user_id = auth.uid());
 
+-- Fix #1675: previously "USING (user_id = auth.uid())" with no WITH CHECK
+-- restriction let the owner freely rewrite status, but the actual bug was
+-- reviewers trying (and silently failing) to flip status themselves. Status
+-- transitions now happen exclusively inside the submit_peer_review()
+-- SECURITY DEFINER function (see 20260706000001_peer_review_status_rpc.sql),
+-- which bypasses RLS after its own auth checks. This WITH CHECK blocks any
+-- direct client-side status mutation, by owner or otherwise, so the RPC is
+-- the only path that can ever move status forward.
 CREATE POLICY "Users can update own submissions" 
-  ON public.peer_submissions FOR UPDATE USING (user_id = auth.uid());
+  ON public.peer_submissions FOR UPDATE USING (user_id = auth.uid())
+  WITH CHECK (
+    user_id = auth.uid()
+    AND status IS NOT DISTINCT FROM (SELECT status FROM public.peer_submissions WHERE id = peer_submissions.id)
+  );
 
 CREATE POLICY "Users can delete own submissions" 
   ON public.peer_submissions FOR DELETE USING (user_id = auth.uid());

@@ -58,33 +58,72 @@ export default function ReviewSubmission() {
 
   const handleFeedbackSubmit = async () => {
     if (!user || !id || !feedback.trim()) return;
-    
-    setSubmitting(true);
-    
-    const { data, error } = await supabase
-      .from('peer_reviews')
-      .insert({
-        submission_id: id,
-        reviewer_id: user.id,
-        feedback: feedback
-      })
-      .select('*, profiles(name, avatar_url)')
-      .single();
 
-    if (error) {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
-    } else if (data) {
-      toast({ title: "Success", description: "Feedback submitted successfully." });
-      setReviews([...reviews, data]);
-      setFeedback("");
-      
-      // Update status if it was pending
-      if (submission.status === 'pending') {
-        await supabase.from('peer_submissions').update({ status: 'reviewed' }).eq('id', id);
-        setSubmission({ ...submission, status: 'reviewed' });
+    setSubmitting(true);
+
+    // Fixes #1675: previously this did two separate calls — an insert into
+    // peer_reviews, then a client-side update of peer_submissions.status —
+    // and the status update's error was never checked. That update also
+    // silently failed under RLS because only the submission owner (not the
+    // reviewer) was allowed to update peer_submissions, so a submission
+    // could have reviews and still show as "pending".
+    //
+    // Now both steps happen atomically inside a single SECURITY DEFINER RPC,
+    // and any failure (including a failed status transition) is surfaced
+    // here instead of being ignored.
+    const { data: reviewRow, error: rpcError } = await supabase.rpc(
+      "submit_peer_review",
+      {
+        p_submission_id: id,
+        p_feedback: feedback,
       }
+    );
+
+    if (rpcError || !reviewRow) {
+      toast({
+        title: "Error",
+        description: rpcError?.message || "Could not submit feedback.",
+        variant: "destructive",
+      });
+      setSubmitting(false);
+      return;
     }
-    
+
+    // Re-fetch the review with its joined profile, and the submission's
+    // current status, so the UI reflects exactly what the RPC committed.
+    const [{ data: reviewWithProfile, error: reviewFetchError }, { data: refreshedSubmission, error: submissionFetchError }] =
+      await Promise.all([
+        supabase
+          .from("peer_reviews")
+          .select("*, profiles(name, avatar_url)")
+          .eq("id", reviewRow.id)
+          .single(),
+        supabase
+          .from("peer_submissions")
+          .select("status")
+          .eq("id", id)
+          .single(),
+      ]);
+
+    if (reviewFetchError) {
+      // The review was created successfully (the RPC returned it); this is
+      // just a best-effort refresh, so fall back to the RPC's own row
+      // instead of blocking the success state on a secondary read failing.
+      console.error("Failed to refresh review with profile:", reviewFetchError);
+    }
+
+    if (submissionFetchError) {
+      console.error("Failed to refresh submission status:", submissionFetchError);
+    }
+
+    toast({ title: "Success", description: "Feedback submitted successfully." });
+    setReviews((prev) => [...prev, reviewWithProfile ?? reviewRow]);
+    setFeedback("");
+
+    if (refreshedSubmission?.status) {
+      setSubmission((prev: any) => ({ ...prev, status: refreshedSubmission.status }));
+    }
+
     setSubmitting(false);
   };
 
@@ -254,5 +293,3 @@ export default function ReviewSubmission() {
     </div>
   );
 }
-
-// feat/markdown-peer-review
