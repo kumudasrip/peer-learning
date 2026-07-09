@@ -11,8 +11,6 @@ export function useScrollSpy({
 }: UseScrollSpyOptions) {
   const [activeId, setActiveId] = useState<string | null>(null);
 
-  const sectionIdsKey = sectionIds.join(",");
-
   useEffect(() => {
     if (sectionIds.length === 0) return;
 
@@ -53,7 +51,7 @@ export function useScrollSpy({
       window.removeEventListener("scroll", updateActiveSection);
       window.removeEventListener("resize", updateActiveSection);
     };
-  }, [sectionIdsKey, offset]);
+  }, [sectionIds, offset]);
 
   return activeId;
 }
