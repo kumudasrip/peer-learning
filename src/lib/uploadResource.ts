@@ -31,12 +31,13 @@ const getFileExtension = (filename: string) => {
   return parts.length > 1 ? parts.pop()!.toLowerCase() : "";
 };
 
-const sanitizeFilename = (filename: string) =>
-  filename.replace(/[^a-zA-Z0-9._-]/g, "_");
-
 /**
  * Uploads a file to the custom Express API and then creates a corresponding metadata record in the Supabase 'resources' table.
  * This dual-upload strategy ensures files are stored securely while maintaining queryable metadata.
+ *
+ * The backend generates the storage path itself from the authenticated
+ * user's id — this function no longer sends a filePath, it only tells the
+ * backend which upload preset ("resources") to use.
  *
  * @param {File} file - The file object to upload.
  * @param {string} title - The title of the resource.
@@ -78,13 +79,11 @@ export const uploadResource = async (
     };
   }
 
-  const timestamp = Date.now();
-  const filePath = `${userId}/${timestamp}_${sanitizeFilename(file.name)}`;
-
+  // "folder" must be appended before "file" so the backend can read it
+  // before it starts streaming the file (see uploadController.js fileFilter).
   const formData = new FormData();
-  formData.append("file", file);
   formData.append("folder", "resources");
-  formData.append("filePath", filePath);
+  formData.append("file", file);
 
   const session = await supabase.auth.getSession();
   const token = session.data.session?.access_token;
