@@ -42,6 +42,18 @@ export default function MentorForm() {
     mentorship_types: [] as string[],
   });
 
+// Clear validation error reactively when user fixes input (#1614)
+  useEffect(() => {
+    if (!error) return;
+    const isValid =
+      (step === 0 && validateBasicInfo()) ||
+      (step === 1 && validateSkills()) ||
+      (step === 2 && validateExperience()) ||
+      (step === 3 && validateMentorship());
+    if (isValid) setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formData, step]);
+
   useEffect(() => {
     setAvailableSkills(DEFAULT_SKILLS);
   }, []);
@@ -115,6 +127,10 @@ export default function MentorForm() {
   };
 
   const handleSubmit = async () => {
+    if (!validateMentorship()) {
+      setError("Please select at least one mentorship type");
+      return;
+    }
     setLoading(true);
     setError("");
     let isTimeout = false;
@@ -378,10 +394,6 @@ export default function MentorForm() {
                 }
                 if (step === 2 && !validateExperience()) {
                   setError("Please fill GitHub and LinkedIn profiles");
-                  return;
-                }
-                if (step === 3 && !validateMentorship()) {
-                  setError("Please select at least one mentorship type");
                   return;
                 }
                 setError("");

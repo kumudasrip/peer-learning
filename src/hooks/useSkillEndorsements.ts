@@ -37,7 +37,7 @@ export function useSkillEndorsements({
     supabase.auth.getUser().then(({ data }) => {
       setCurrentUserId(data.user?.id ?? null);
       setAuthReady(true);
-    });
+    }).catch(console.error);
   }, []);
 
   const fetchEndorsements = useCallback(async () => {

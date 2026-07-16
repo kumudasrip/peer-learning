@@ -1,1 +1,1 @@
-// issue 1093
+export { default } from "@/components/ErrorBoundary";

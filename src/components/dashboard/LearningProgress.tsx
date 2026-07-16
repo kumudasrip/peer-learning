@@ -18,7 +18,7 @@ export default function LearningProgress() {
       </div>
 
       <div className="space-y-6 flex-1">
-        {goals.map((goal) => (
+        {goals.map((goal, index) => (
           <div key={goal.name} className="group cursor-pointer">
             <div className="flex justify-between mb-2">
               <span className="text-sm font-medium text-slate-300 group-hover:text-white transition-colors">

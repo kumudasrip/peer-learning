@@ -3,7 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { User } from "@supabase/supabase-js";
 
-export function useRoomChat(id: string | undefined, user: User | null, setActivities: React.Dispatch<React.SetStateAction<string[]>>) {
+export function useRoomChat(id: string | undefined, user: User | null) {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const [messages, setMessages] = useState<any[]>([]);
 
@@ -28,12 +28,7 @@ export function useRoomChat(id: string | undefined, user: User | null, setActivi
   }, [fetchMessages]);
 
   const handleSendMessage = useCallback(async (newMessage: string) => {
-    if (!newMessage.trim() || !user || !id) return;
-
-    setActivities((prev) => [
-      `You sent a message`,
-      ...prev,
-    ]);
+    if (!newMessage.trim() || !user || !id) return false;
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error } = await supabase.from('study_room_messages' as any).insert([
@@ -43,8 +38,11 @@ export function useRoomChat(id: string | undefined, user: User | null, setActivi
     if (error) {
       console.error("Database insert error:", error);
       toast.error("Failed to send message. Please try again.");
+      return false;
     }
-  }, [id, user, setActivities]);
+
+    return true;
+  }, [id, user]);
 
   return { messages, handleSendMessage, fetchMessages };
 }

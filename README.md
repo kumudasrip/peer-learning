@@ -514,8 +514,8 @@ Contributions are welcome ## Steps to Contribute
 git checkout -b feature-name
 ```
 
-3. Make your changes
-4. Commit your changes
+3. Make your changes.
+4. Commit your changes.
 
 ```bash
 git commit -m "Add your message"
@@ -619,3 +619,6 @@ This project is licensed under the MIT License.
 ## Empowering Students Through Collaborative Learning Made with by the Open Source Community
 
 </div>
+# TODO: [bug]: validation error message doesn't clear after fixing the issue (skills & experience steps) (#1614)
+#   M i n o r   u p d a t e  
+ 

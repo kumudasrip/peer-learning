@@ -330,7 +330,10 @@ CREATE POLICY "Users can insert peer connection requests"
   ON public.peer_connections FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
 CREATE POLICY "Users can update peer connections" 
-  ON public.peer_connections FOR UPDATE USING (auth.uid() = receiver_id);
+  ON public.peer_connections FOR UPDATE USING (auth.uid() = receiver_id) WITH CHECK (
+    auth.uid() = receiver_id
+    AND status IN ('accepted', 'rejected')
+  );
 
 CREATE POLICY "Users can delete peer connections" 
   ON public.peer_connections FOR DELETE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
@@ -342,8 +345,20 @@ CREATE POLICY "Users can view submissions"
 CREATE POLICY "Users can insert submissions" 
   ON public.peer_submissions FOR INSERT WITH CHECK (user_id = auth.uid());
 
+-- Fix #1675: previously "USING (user_id = auth.uid())" with no WITH CHECK
+-- restriction let the owner freely rewrite status, but the actual bug was
+-- reviewers trying (and silently failing) to flip status themselves. Status
+-- transitions now happen exclusively inside the submit_peer_review()
+-- SECURITY DEFINER function (see 20260706000001_peer_review_status_rpc.sql),
+-- which bypasses RLS after its own auth checks. This WITH CHECK blocks any
+-- direct client-side status mutation, by owner or otherwise, so the RPC is
+-- the only path that can ever move status forward.
 CREATE POLICY "Users can update own submissions" 
-  ON public.peer_submissions FOR UPDATE USING (user_id = auth.uid());
+  ON public.peer_submissions FOR UPDATE USING (user_id = auth.uid())
+  WITH CHECK (
+    user_id = auth.uid()
+    AND status IS NOT DISTINCT FROM (SELECT status FROM public.peer_submissions WHERE id = peer_submissions.id)
+  );
 
 CREATE POLICY "Users can delete own submissions" 
   ON public.peer_submissions FOR DELETE USING (user_id = auth.uid());
@@ -412,7 +427,7 @@ CREATE POLICY "Users can insert push subscriptions"
   ON public.push_subscriptions FOR INSERT WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can update own push subscriptions" 
-  ON public.push_subscriptions FOR UPDATE USING (user_id = auth.uid());
+  ON public.push_subscriptions FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can delete own push subscriptions" 
   ON public.push_subscriptions FOR DELETE USING (user_id = auth.uid());
@@ -420,15 +435,25 @@ CREATE POLICY "Users can delete own push subscriptions"
 --------------------------------------------------------------------------------
 -- 10. RESOURCES & WHITEBOARD
 --------------------------------------------------------------------------------
--- resources (Assuming existence)
+-- resources
+-- Fix #1674: previously INSERT/UPDATE/DELETE all used a blanket `true` check,
+-- so RLS enforced nothing and any authenticated user could modify or delete
+-- another user's uploaded resource directly via the Supabase client, bypassing
+-- the frontend's ownership check entirely. Now ownership is enforced at the
+-- database layer via the `uploaded_by` column, matching what
+-- uploadResource.ts already writes and what deleteResource.ts already assumes.
 CREATE POLICY "Anyone can view resources" 
   ON public.resources FOR SELECT USING (true);
-CREATE POLICY "Users can insert resources" 
-  ON public.resources FOR INSERT WITH CHECK (true);
-CREATE POLICY "Users can update resources" 
-  ON public.resources FOR UPDATE USING (true);
-CREATE POLICY "Users can delete resources" 
-  ON public.resources FOR DELETE USING (true);
+
+CREATE POLICY "Users can insert own resources" 
+  ON public.resources FOR INSERT WITH CHECK (uploaded_by = auth.uid());
+
+CREATE POLICY "Users can update own resources" 
+  ON public.resources FOR UPDATE USING (uploaded_by = auth.uid())
+  WITH CHECK (uploaded_by = auth.uid());
+
+CREATE POLICY "Users can delete own resources" 
+  ON public.resources FOR DELETE USING (uploaded_by = auth.uid());
 
 -- saved_resources
 CREATE POLICY "Users can view own saved resources" 
@@ -450,17 +475,114 @@ CREATE POLICY "Users can remove votes"
 
 -- whiteboard_events
 CREATE POLICY "Anyone can view whiteboard events" 
-  ON public.whiteboard_events FOR SELECT USING (true);
+  ON public.whiteboard_events FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_events.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 CREATE POLICY "Users can create whiteboard events" 
-  ON public.whiteboard_events FOR INSERT WITH CHECK (true);
+  ON public.whiteboard_events FOR INSERT WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_events.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 
 -- whiteboard_states
 CREATE POLICY "Anyone can view whiteboard states" 
-  ON public.whiteboard_states FOR SELECT USING (true);
+  ON public.whiteboard_states FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 CREATE POLICY "Users can update whiteboard states" 
-  ON public.whiteboard_states FOR INSERT WITH CHECK (true);
+  ON public.whiteboard_states FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 CREATE POLICY "Users can modify whiteboard states" 
-  ON public.whiteboard_states FOR UPDATE USING (true);
+  ON public.whiteboard_states FOR UPDATE USING (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  ) WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 
 --------------------------------------------------------------------------------
 -- 11. MISC TABLES
@@ -487,7 +609,10 @@ CREATE POLICY "Users can insert doubts"
 CREATE POLICY "Admins can view contact messages" 
   ON public.contact_messages FOR SELECT USING (public.has_role(auth.uid(), 'admin'));
 CREATE POLICY "Anyone can insert contact messages" 
-  ON public.contact_messages FOR INSERT WITH CHECK (true);
+  ON public.contact_messages FOR INSERT WITH CHECK (
+    public.contact_recent_count(email, 10) < 3
+    AND NOT public.contact_duplicate_exists(email, message, 10)
+  );
 
 -- users table (if it exists outside auth schema)
 DO $$
