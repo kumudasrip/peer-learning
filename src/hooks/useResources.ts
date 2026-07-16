@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any, @typescript-eslint/no-empty-object-type, no-unsafe-finally, @typescript-eslint/no-unused-expressions, @typescript-eslint/ban-ts-comment, @typescript-eslint/no-require-imports */
+ 
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { toast } from "@/hooks/use-toast";
@@ -63,12 +63,10 @@ export const useResources = (filters?: ResourceFilters) => {
           return;
         }
         
-        const { data: savedData, error: savedError } = await safeSupabaseCall(
+        const savedData = await safeSupabaseCall<SavedResource[]>(
           () => (supabase as any).from("saved_resources").select("resource_id").eq("user_id", user.id).abortSignal(controller.signal)
         );
-        
-        if (savedError) throw savedError;
-        
+
         savedResourceIds =
           (savedData as SavedResource[] | null)?.map(
             (item) => item.resource_id
@@ -128,7 +126,7 @@ export const useResources = (filters?: ResourceFilters) => {
         description: normalized.message,
         variant: "destructive",
       });
-    } // eslint-disable-next-line no-unsafe-finally
+    }  
     finally {
       if (!isMountedRef.current || requestId !== requestIdRef.current || controller.signal.aborted) {
         return;

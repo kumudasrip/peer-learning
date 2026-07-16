@@ -330,7 +330,10 @@ CREATE POLICY "Users can insert peer connection requests"
   ON public.peer_connections FOR INSERT WITH CHECK (auth.uid() = sender_id);
 
 CREATE POLICY "Users can update peer connections" 
-  ON public.peer_connections FOR UPDATE USING (auth.uid() = receiver_id);
+  ON public.peer_connections FOR UPDATE USING (auth.uid() = receiver_id) WITH CHECK (
+    auth.uid() = receiver_id
+    AND status IN ('accepted', 'rejected')
+  );
 
 CREATE POLICY "Users can delete peer connections" 
   ON public.peer_connections FOR DELETE USING (auth.uid() = sender_id OR auth.uid() = receiver_id);
@@ -424,7 +427,7 @@ CREATE POLICY "Users can insert push subscriptions"
   ON public.push_subscriptions FOR INSERT WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can update own push subscriptions" 
-  ON public.push_subscriptions FOR UPDATE USING (user_id = auth.uid());
+  ON public.push_subscriptions FOR UPDATE USING (user_id = auth.uid()) WITH CHECK (user_id = auth.uid());
 
 CREATE POLICY "Users can delete own push subscriptions" 
   ON public.push_subscriptions FOR DELETE USING (user_id = auth.uid());
@@ -472,17 +475,114 @@ CREATE POLICY "Users can remove votes"
 
 -- whiteboard_events
 CREATE POLICY "Anyone can view whiteboard events" 
-  ON public.whiteboard_events FOR SELECT USING (true);
+  ON public.whiteboard_events FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_events.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 CREATE POLICY "Users can create whiteboard events" 
-  ON public.whiteboard_events FOR INSERT WITH CHECK (true);
+  ON public.whiteboard_events FOR INSERT WITH CHECK (
+    user_id = auth.uid()
+    AND EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_events.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 
 -- whiteboard_states
 CREATE POLICY "Anyone can view whiteboard states" 
-  ON public.whiteboard_states FOR SELECT USING (true);
+  ON public.whiteboard_states FOR SELECT USING (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 CREATE POLICY "Users can update whiteboard states" 
-  ON public.whiteboard_states FOR INSERT WITH CHECK (true);
+  ON public.whiteboard_states FOR INSERT WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 CREATE POLICY "Users can modify whiteboard states" 
-  ON public.whiteboard_states FOR UPDATE USING (true);
+  ON public.whiteboard_states FOR UPDATE USING (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  ) WITH CHECK (
+    EXISTS (
+      SELECT 1
+      FROM public.study_rooms sr
+      WHERE sr.id = whiteboard_states.room_id
+        AND (
+          NOT sr.is_private
+          OR sr.created_by = auth.uid()
+          OR EXISTS (
+            SELECT 1
+            FROM public.study_room_participants srp
+            WHERE srp.room_id = sr.id
+              AND srp.profile_id = auth.uid()
+          )
+        )
+    )
+  );
 
 --------------------------------------------------------------------------------
 -- 11. MISC TABLES
@@ -509,7 +609,10 @@ CREATE POLICY "Users can insert doubts"
 CREATE POLICY "Admins can view contact messages" 
   ON public.contact_messages FOR SELECT USING (public.has_role(auth.uid(), 'admin'));
 CREATE POLICY "Anyone can insert contact messages" 
-  ON public.contact_messages FOR INSERT WITH CHECK (true);
+  ON public.contact_messages FOR INSERT WITH CHECK (
+    public.contact_recent_count(email, 10) < 3
+    AND NOT public.contact_duplicate_exists(email, message, 10)
+  );
 
 -- users table (if it exists outside auth schema)
 DO $$

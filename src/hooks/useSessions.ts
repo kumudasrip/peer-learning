@@ -96,22 +96,34 @@ export function useSessions(user: any) {
   // - sessionSummary: without this, a summary generated for a previous
   //   video session can keep showing after switching to a different
   //   session, making it look like it belongs to the new one.
+  // - messages: without this, the previous session's thread stays rendered
+  //   for the whole fetch round-trip after switching.
   useEffect(() => {
     setParticipantCount(1);
     setSessionSummary(null);
+    setMessages([]);
   }, [selectedSession]);
 
   useEffect(() => {
     if (!selectedSession) return;
 
     const fetchMessages = async () => {
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("messages")
         .select("*")
         .eq("session_id", selectedSession.id)
         .order("created_at", { ascending: true });
 
-      setMessages(data || []);
+      if (error) {
+        console.error("Failed to fetch session messages:", error);
+        toast({
+          title: "Failed to load messages",
+          description: "Could not load session messages. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        setMessages(data || []);
+      }
     };
 
     fetchMessages();

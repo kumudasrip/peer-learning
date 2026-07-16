@@ -140,10 +140,10 @@ if (profile.bio.length > MAX_BIO_CHARS) {
 
             <h1 className="text-5xl font-bold mb-3">Edit Profile</h1>
             <button
-              onClick={() => navigate('/profile')}
+              onClick={() => navigate('/dashboard')}
               className="inline-flex items-center gap-2 bg-white/5 border border-white/10 text-gray-300 px-4 py-2 rounded-full hover:border-cyan-400/50 hover:text-cyan-300 transition mt-2"
             >
-              ← Back to Profile
+              ← Back to Dashboard
             </button>
             <p className="text-gray-400 text-lg">
               Build your learning identity 🚀

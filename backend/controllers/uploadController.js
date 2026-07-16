@@ -1,11 +1,61 @@
 import multer from "multer";
 import os from "os";
 import fs from "fs";
+import crypto from "crypto";
 import { getSupabaseAdmin } from "../utils/supabase.js";
 import { HttpError } from "../utils/httpError.js";
 
 // Ensure files do not exceed 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
+
+// Buckets this endpoint may write to, and the file types each one accepts.
+// The client-supplied "folder" field only *selects* one of these presets —
+// it never influences the actual storage path, which is always derived
+// server-side from the authenticated user's id (fix for #1719).
+const UPLOAD_PRESETS = {
+  avatars: {
+    mimetypes: new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]),
+    extensions: {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+    },
+  },
+  profiles: {
+    mimetypes: new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]),
+    extensions: {
+      "image/jpeg": "jpg",
+      "image/png": "png",
+      "image/webp": "webp",
+      "image/gif": "gif",
+    },
+  },
+  resources: {
+    mimetypes: new Set([
+      "application/pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+      "application/zip",
+      "text/plain",
+      "text/markdown",
+      "text/javascript",
+      "text/x-python",
+      "application/x-python-code",
+      "application/typescript",
+    ]),
+    extensions: {
+      "application/pdf": "pdf",
+      "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
+      "application/zip": "zip",
+      "text/plain": "txt",
+      "text/markdown": "md",
+      "text/javascript": "js",
+      "text/x-python": "py",
+      "application/x-python-code": "py",
+      "application/typescript": "ts",
+    },
+  },
+};
 
 // Use os.tmpdir() to avoid buffering the whole file in memory.
 // It uses the disk to stream the file, keeping memory usage low.
@@ -15,29 +65,23 @@ const upload = multer({
     fileSize: MAX_FILE_SIZE,
   },
   fileFilter: (req, file, cb) => {
-    // Only allow specific mimetypes, e.g. images
-    const allowedTypes = ["image/jpeg", "image/png", "image/webp", "image/gif"];
-    // Wait, the user mentioned avatars/resources. For resources, they might upload PDF etc.
-    // The issue says: "Unrestricted image upload... check file.mimetype.startsWith('image/')"
-    // But since uploadResource also uploads pdf, docx, etc., we should support both or define it dynamically.
-    // Let's accept images and common document types since this endpoint is used for both.
-    const allowedResourceTypes = [
-      "application/pdf",
-      "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-      "application/zip",
-      "text/plain",
-      "text/markdown",
-      "text/javascript",
-      "text/x-python",
-      "application/x-python-code",
-      "application/typescript"
-    ];
+    // IMPORTANT: the client must append the "folder" field to the FormData
+    // *before* the "file" field, or multer will not have parsed it into
+    // req.body yet when this filter runs.
+    const folder = req.body?.folder;
+    const preset = UPLOAD_PRESETS[folder];
 
-    if (file.mimetype.startsWith("image/") || allowedResourceTypes.includes(file.mimetype)) {
-      cb(null, true);
-    } else {
-      cb(new HttpError(415, "Unsupported Media Type"));
+    if (!preset) {
+      cb(new HttpError(400, "Invalid or missing destination folder."));
+      return;
     }
+
+    if (!preset.mimetypes.has(file.mimetype)) {
+      cb(new HttpError(415, "Unsupported Media Type for this upload type."));
+      return;
+    }
+
+    cb(null, true);
   },
 });
 
@@ -50,20 +94,29 @@ export const handleUpload = async (req, res, next) => {
     }
 
     const file = req.file;
-    const { folder = "resources", filePath } = req.body;
+    const folder = req.body.folder;
+    const preset = UPLOAD_PRESETS[folder];
 
-    if (!filePath) {
-      // Clean up the temp file
+    // Defensive re-check: fileFilter already validated this, but don't rely
+    // solely on it in case multer's field-ordering requirement isn't met.
+    if (!preset || !preset.mimetypes.has(file.mimetype)) {
       fs.unlinkSync(file.path);
-      throw new HttpError(400, "filePath is required in the form data.");
+      throw new HttpError(400, "Invalid destination folder or file type.");
     }
 
-    // Verify folder is allowed
-    const allowedBuckets = ["resources", "avatars", "profiles"];
-    if (!allowedBuckets.includes(folder)) {
+    const userId = req.user?.id;
+    if (!userId) {
       fs.unlinkSync(file.path);
-      throw new HttpError(400, "Invalid destination folder.");
+      throw new HttpError(401, "Authentication required.");
     }
+
+    // The storage path is always generated on the server from the
+    // authenticated user's own id. Client-supplied filePath/folder-path
+    // values are never used to build it, so a user can never write into
+    // another user's namespace.
+    const extension = preset.extensions[file.mimetype] || "bin";
+    const uniqueId = crypto.randomUUID();
+    const filePath = `${userId}/${Date.now()}_${uniqueId}.${extension}`;
 
     const supabaseAdmin = getSupabaseAdmin();
     if (!supabaseAdmin) {
@@ -98,8 +151,8 @@ export const handleUpload = async (req, res, next) => {
         path: filePath,
         url: publicUrlData.publicUrl,
         size: file.size,
-        mimetype: file.mimetype
-      }
+        mimetype: file.mimetype,
+      },
     });
   } catch (err) {
     // Make sure we clean up if something goes wrong

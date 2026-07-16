@@ -13,9 +13,25 @@ const __dirname = path.dirname(__filename);
 const profilesUploadDir = path.resolve(__dirname, "../uploads/profiles");
 
 // ── Supabase stub (requireAuth fast-path won't reach it, but the import needs it) ──
+// Extended with a storage stub so the /api/upload suite below (uploadController.js)
+// can assert on the path passed to storage.upload().
+const { storageUploadMock, storageFromMock } = vi.hoisted(() => {
+  const storageUploadMock = vi.fn(() =>
+    Promise.resolve({ data: { path: "mock-path" }, error: null })
+  );
+  const storageFromMock = vi.fn(() => ({
+    upload: storageUploadMock,
+    getPublicUrl: (filePath) => ({
+      data: { publicUrl: `https://mock.supabase.co/storage/v1/object/public/mock/${filePath}` },
+    }),
+  }));
+  return { storageUploadMock, storageFromMock };
+});
+
 vi.mock("../utils/supabase.js", () => ({
   getSupabaseAdmin: vi.fn(() => ({
     auth: { getUser: vi.fn() },
+    storage: { from: storageFromMock },
   })),
 }));
 
@@ -55,17 +71,26 @@ const makeToken = (overrides = {}) =>
     TEST_SECRET
   );
 
-// ── Shared app fixture ─────────────────────────────────────────────────────────────
+// ── Shared app fixtures ────────────────────────────────────────────────────────────
 let app;
+let uploadApp;
 
 beforeAll(async () => {
   vi.stubEnv("SUPABASE_JWT_SECRET", TEST_SECRET);
+
   const { default: userRoutes } = await import("../routes/users.js");
   app = express();
   app.use(cookieParser());
   app.use(express.json());
   app.use("/api/users", userRoutes);
   app.use(errorHandler);
+
+  const { default: uploadRoutes } = await import("../routers/uploadRoutes.js");
+  uploadApp = express();
+  uploadApp.use(cookieParser());
+  uploadApp.use(express.json());
+  uploadApp.use("/api/upload", uploadRoutes);
+  uploadApp.use(errorHandler);
 });
 
 afterAll(() => {
@@ -74,6 +99,8 @@ afterAll(() => {
 
 afterEach(() => {
   fs.rmSync(profilesUploadDir, { recursive: true, force: true });
+  storageUploadMock.mockClear();
+  storageFromMock.mockClear();
   vi.restoreAllMocks();
 });
 
@@ -203,5 +230,114 @@ describe("POST /api/users/upload-photo", () => {
 
     expect(res.status).toBe(413);
     expect(res.body.error).toMatch(/5mb/i);
+  });
+});
+
+// ── Path-ownership coverage for the general upload endpoint (#1719) ─────────────────
+describe("POST /api/upload", () => {
+  it("returns 401 when no auth is provided", async () => {
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .field("folder", "avatars")
+      .attach("file", TINY_PNG, { filename: "test.png", contentType: "image/png" });
+
+    expect(res.status).toBe(401);
+    expect(storageUploadMock).not.toHaveBeenCalled();
+  });
+
+  it("ignores a client-supplied filePath and writes under the authenticated user's own id", async () => {
+    const token = makeToken();
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .field("folder", "avatars")
+      .field("filePath", "victim-user-id/test.png")
+      .attach("file", TINY_PNG, { filename: "avatar.png", contentType: "image/png" });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+
+    // The path actually handed to Supabase Storage must be scoped to the
+    // caller's own id, never the client-supplied filePath.
+    expect(storageUploadMock).toHaveBeenCalledTimes(1);
+    const [usedPath] = storageUploadMock.mock.calls[0];
+    expect(usedPath.startsWith(`${TEST_USER_ID}/`)).toBe(true);
+    expect(usedPath).not.toContain("victim-user-id");
+
+    expect(res.body.data.path.startsWith(`${TEST_USER_ID}/`)).toBe(true);
+    expect(res.body.data.path).not.toContain("victim-user-id");
+  });
+
+  it("ignores an attempted path-traversal filePath and still scopes the write to the caller's id", async () => {
+    const token = makeToken();
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .field("folder", "resources")
+      .field("filePath", "../../etc/passwd")
+      .attach("file", Buffer.from("resource contents"), {
+        filename: "notes.txt",
+        contentType: "text/plain",
+      });
+
+    expect(res.status).toBe(200);
+    const [usedPath] = storageUploadMock.mock.calls[0];
+    expect(usedPath.startsWith(`${TEST_USER_ID}/`)).toBe(true);
+    expect(usedPath).not.toContain("..");
+  });
+
+  it("returns 400 when the folder field is missing", async () => {
+    const token = makeToken();
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .attach("file", TINY_PNG, { filename: "avatar.png", contentType: "image/png" });
+
+    expect(res.status).toBe(400);
+    expect(storageUploadMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the folder is not one of the allowed presets", async () => {
+    const token = makeToken();
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .field("folder", "some-other-bucket")
+      .attach("file", TINY_PNG, { filename: "avatar.png", contentType: "image/png" });
+
+    expect(res.status).toBe(400);
+    expect(storageUploadMock).not.toHaveBeenCalled();
+  });
+
+  it("returns 415 when the file type does not match the selected folder's preset", async () => {
+    const token = makeToken();
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .field("folder", "avatars")
+      .attach("file", Buffer.from("not an image"), {
+        filename: "doc.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(415);
+    expect(storageUploadMock).not.toHaveBeenCalled();
+  });
+
+  it("accepts a resource-type file under the resources preset", async () => {
+    const token = makeToken();
+    const res = await request(uploadApp)
+      .post("/api/upload")
+      .set("Authorization", `Bearer ${token}`)
+      .field("folder", "resources")
+      .attach("file", Buffer.from("%PDF-1.4 fake pdf"), {
+        filename: "report.pdf",
+        contentType: "application/pdf",
+      });
+
+    expect(res.status).toBe(200);
+    expect(res.body.success).toBe(true);
+    expect(res.body.data.path.startsWith(`${TEST_USER_ID}/`)).toBe(true);
+    expect(res.body.data.path.endsWith(".pdf")).toBe(true);
   });
 });

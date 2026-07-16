@@ -41,6 +41,7 @@ export default function MentorForm() {
       (step === 2 && validateExperience()) ||
       (step === 3 && validateMentorship());
     if (isValid) setError("");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [formData, step]);
 
   useEffect(() => {
@@ -115,6 +116,10 @@ export default function MentorForm() {
     return formData.mentorship_types.length > 0;
   };
   const handleSubmit = async () => {
+    if (!validateMentorship()) {
+      setError("Please select at least one mentorship type");
+      return;
+    }
     setLoading(true);
     setError("");
     let isTimeout = false;
@@ -414,10 +419,6 @@ export default function MentorForm() {
                 }
                 if (step === 2 && !validateExperience()) {
                   setError("Please fill GitHub and LinkedIn profiles");
-                  return;
-                }
-                if (step === 3 && !validateMentorship()) {
-                  setError("Please select at least one mentorship type");
                   return;
                 }
                 setError("");

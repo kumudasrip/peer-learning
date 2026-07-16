@@ -61,11 +61,11 @@ export const errorHandler = (err, req, res, next) => {
     return res.status(400).json({ error: err.message });
   }
 
-  console.error("Unhandled error:", err);
   // --- Known HttpError (intentionally thrown by our code) ---
   if (err instanceof HttpError) {
     const status = err.statusCode || 500;
-    console.error(`[${requestId}] HttpError ${status}:`, err.message);
+    const log = status >= 500 ? console.error : console.warn;
+    log(`[${requestId}] HttpError ${status}:`, err.message);
 
     const payload = { error: err.message };
 

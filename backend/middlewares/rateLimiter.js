@@ -20,11 +20,12 @@ const CLEANUP_INTERVAL_MS = 60 * 1000;
  * Derives a rate-limit key for the current request.
  *
  * Priority:
- *   1. Authenticated user ID (most reliable - cannot be spoofed).
- *   2. Composite fingerprint combining req.ip, the raw socket remote address,
- *      and the User-Agent header. This ensures that even if an attacker spoofs
- *      X-Forwarded-For (when trust proxy is misconfigured), the raw socket IP
- *      still anchors them to their real origin.
+ *   1. Authenticated user ID (cannot be spoofed).
+ *   2. Client IP: req.ip plus the raw socket remote address, so a spoofed
+ *      X-Forwarded-For still resolves to the real socket origin.
+ *
+ * Client-controlled headers such as User-Agent are excluded, since an attacker
+ * could rotate them to obtain fresh buckets and bypass the limit.
  */
 const deriveRateLimitKey = (req) => {
   if (req.user?.id) {
@@ -33,9 +34,8 @@ const deriveRateLimitKey = (req) => {
 
   const expressIp = req.ip || "unknown";
   const socketIp = req.socket?.remoteAddress || "unknown";
-  const ua = req.headers["user-agent"] || "no-ua";
 
-  return `ip:${expressIp}|${socketIp}|${ua}`;
+  return `ip:${expressIp}|${socketIp}`;
 };
 
 export const createRateLimiter = (options = {}) => {
