@@ -373,30 +373,33 @@ export type Database = {
           id: string
           title: string
           description: string | null
-          url: string
+          file_url: string
+          file_size: number | null
           tags: string[] | null
           file_type: string
-          user_id: string
+          uploaded_by: string
           created_at: string
         }
         Insert: {
           id?: string
           title: string
           description?: string | null
-          url: string
+          file_url: string
+          file_size?: number | null
           tags?: string[] | null
           file_type: string
-          user_id: string
+          uploaded_by: string
           created_at?: string
         }
         Update: {
           id?: string
           title?: string
           description?: string | null
-          url?: string
+          file_url?: string
+          file_size?: number | null
           tags?: string[] | null
           file_type?: string
-          user_id?: string
+          uploaded_by?: string
           created_at?: string
         }
         Relationships: []
@@ -442,6 +445,30 @@ export type Database = {
           id?: string
           resource_id?: string
           user_id?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      skill_endorsements: {
+        Row: {
+          id: string
+          skill: string
+          endorsed_user_id: string
+          endorser_id: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          skill: string
+          endorsed_user_id: string
+          endorser_id: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          skill?: string
+          endorsed_user_id?: string
+          endorser_id?: string
           created_at?: string
         }
         Relationships: []
@@ -626,7 +653,14 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      skill_endorsement_counts: {
+        Row: {
+          endorsed_user_id: string
+          skill: string
+          endorsement_count: number
+        }
+        Relationships: []
+      }
     }
     Functions: {
       award_activity_xp: {

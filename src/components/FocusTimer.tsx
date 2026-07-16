@@ -10,6 +10,12 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { useToast } from '@/components/ui/use-toast';
 
+const clampDuration = (value: string, min: number, max: number, fallback: number) => {
+  const next = Number(value);
+  if (!Number.isFinite(next)) return fallback;
+  return Math.min(max, Math.max(min, Math.trunc(next)));
+};
+
 export default function FocusTimer() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -103,8 +109,9 @@ export default function FocusTimer() {
     const newIsActive = !isActive;
     setIsActive(newIsActive);
     
-    if (!newIsActive && !isBreak) {
-      // Stopped manually during work
+    if (!newIsActive) {
+      // Reset manual stops to the next work session, even if the current mode is break.
+      setIsBreak(false);
       setTimeLeft(workDuration * 60);
     }
     
@@ -180,7 +187,7 @@ export default function FocusTimer() {
                   type="number" 
                   value={workDuration}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
+                    const val = clampDuration(e.target.value, 1, 120, workDuration);
                     setWorkDuration(val);
                     if (!isBreak) setTimeLeft(val * 60);
                   }}
@@ -194,7 +201,7 @@ export default function FocusTimer() {
                   type="number" 
                   value={breakDuration}
                   onChange={(e) => {
-                    const val = Number(e.target.value);
+                    const val = clampDuration(e.target.value, 1, 60, breakDuration);
                     setBreakDuration(val);
                     if (isBreak) setTimeLeft(val * 60);
                   }}

@@ -21,7 +21,7 @@ import StreakBadge from "./components/StreakBadge";
 import CookieConsentBanner from "./components/CookieConsentBanner";
 import FloatingAI from "./components/FloatingAI";
 import MouseSparkles from "./components/MouseSparkles";
-import BackToTop from "./components/BackToTop";  // ? ADDED THIS LINE
+import BackToTop from "./components/BackToTop";
 import { useAuth } from "@/contexts/useAuth";
 import SplashScreen from "./components/SplashScreen";
 
@@ -408,4 +408,3 @@ function App() {
 }
 
 export default App;
-// fix/error-boundaries

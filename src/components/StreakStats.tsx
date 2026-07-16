@@ -11,7 +11,7 @@ export default function StreakStats() {
   const [data, setData] = useState<StreakData | null>(null);
 
   useEffect(() => {
-    getStreakData().then(setData);
+    getStreakData().then(setData).catch(console.error);
   }, []);
 
   if (!data) {

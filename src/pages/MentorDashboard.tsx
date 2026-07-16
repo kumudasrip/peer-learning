@@ -73,7 +73,8 @@ const MentorDashboard = () => {
         const { data: sessionData } = await supabase
           .from("sessions")
           .select("id,title,scheduled_at,duration_minutes,status")
-          .in("status", ["upcoming", "scheduled", "live"])
+          .eq("status", "scheduled")
+          .eq("mentor_id", user.id)
           .limit(4);
 
         if (sessionData) {

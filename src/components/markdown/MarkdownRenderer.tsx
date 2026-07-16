@@ -1,1 +1,1 @@
-// issue 1099
+export { MarkdownRenderer, default } from "@/components/MarkdownRenderer";

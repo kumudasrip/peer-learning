@@ -67,7 +67,7 @@ export function useRoomPresence(id: string | undefined, user: User | null, fetch
 
       if (roomChannel) supabase.removeChannel(roomChannel);
     };
-  }, [id, user, fetchMessages]);
+  }, [id, user, fetchMessages, setActivities]);
 
   return { participants };
 }
