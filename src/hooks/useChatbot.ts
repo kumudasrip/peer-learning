@@ -50,11 +50,17 @@ export function useChatbot() {
       const { data: { session } } = await supabase.auth.getSession();
       if (!session?.user) return;
 
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("chat_messages")
         .select("*")
         .eq("user_id", session.user.id)
         .order("created_at", { ascending: true });
+
+      if (error) {
+        logError(error, { context: "useChatbot.loadChats" });
+        toast.error("Failed to load chat history.");
+        return;
+      }
 
       if (data) setMessages(data as any as Message[]);
     };
