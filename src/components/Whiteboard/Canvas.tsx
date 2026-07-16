@@ -2,6 +2,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/contexts/useAuth";
+import { toast } from "sonner";
 import {
   Point,
   ToolType,
@@ -114,12 +115,16 @@ export default function Canvas({ roomId }: Props) {
   }, []);
 
   const persistEvent = async (event: WhiteboardEvent) => {
-    await supabase.from("whiteboard_events" as any).insert({
+    const { error } = await supabase.from("whiteboard_events" as any).insert({
       room_id: roomId,
       user_id: user?.id,
       type: event.type,
       payload: event.payload,
     });
+    if (error) {
+      console.error("Whiteboard save failed:", error);
+      toast.error("Drawing could not be saved. Please check your connection.");
+    }
   };
 
   const broadcastEvent = (event: WhiteboardEvent) => {
@@ -174,17 +179,20 @@ export default function Canvas({ roomId }: Props) {
         setHostId((room as any).created_by);
       }
 
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from("whiteboard_events" as any)
         .select("*")
         .eq("room_id", roomId)
-        .order("created_at", {
-          ascending: true,
-        });
+        .order("created_at", { ascending: true });
+
+      if (error) {
+        console.error("Failed to load whiteboard history:", error);
+        toast.error("Could not load whiteboard history. Please refresh.");
+        return;
+      }
 
       if (data) {
         strokesRef.current = data as any;
-
         replayCanvas();
       }
     };
@@ -315,80 +323,87 @@ export default function Canvas({ roomId }: Props) {
     currentStrokeId.current = null;
   };
   const undoLastStroke = async () => {
-  const events = [...strokesRef.current];
+    const events = [...strokesRef.current];
 
-  let lastStrokeId: string | undefined;
+    let lastStrokeId: string | undefined;
 
-  for (let i = events.length - 1; i >= 0; i--) {
-    if (events[i].user_id !== user?.id) continue;
+    for (let i = events.length - 1; i >= 0; i--) {
+      if (events[i].user_id !== user?.id) continue;
 
-    const strokeId =
-      events[i].payload?.strokeId;
+      const strokeId =
+        events[i].payload?.strokeId;
 
-    if (strokeId) {
-      lastStrokeId = strokeId;
-      break;
+      if (strokeId) {
+        lastStrokeId = strokeId;
+        break;
+      }
     }
-  }
 
-  if (!lastStrokeId) return;
+    if (!lastStrokeId) return;
 
-  const updated = events.filter(
-    (event) =>
-      event.payload?.strokeId !==
-      lastStrokeId
-  );
-
-  strokesRef.current = updated;
-
-  replayCanvas();
-
-  await supabase
-    .from("whiteboard_events" as any)
-    .delete()
-    .eq("room_id", roomId)
-    .eq("user_id", user?.id)
-    .eq(
-      "payload->>strokeId",
-      lastStrokeId
+    const updated = events.filter(
+      (event) =>
+        event.payload?.strokeId !==
+        lastStrokeId
     );
 
-  broadcastEvent({
-    type: "undo",
-    payload: {
-      strokeId: lastStrokeId,
-    },
-  });
-};
+    strokesRef.current = updated;
+
+    replayCanvas();
+
+    const { error: undoError } = await supabase
+      .from("whiteboard_events" as any)
+      .delete()
+      .eq("room_id", roomId)
+      .eq("user_id", user?.id)
+      .eq("payload->>strokeId", lastStrokeId);
+
+    if (undoError) {
+      console.error("Undo failed to sync:", undoError);
+      toast.error("Undo could not be saved. Please check your connection.");
+    }
+
+    broadcastEvent({
+      type: "undo",
+      payload: {
+        strokeId: lastStrokeId,
+      },
+    });
+  };
 
   const clearBoard = async () => {
-  if (user?.id !== hostId) return;
+    if (user?.id !== hostId) return;
 
-  const ctx = getContext();
+    const ctx = getContext();
 
-  if (!ctx) return;
+    if (!ctx) return;
 
-  ctx.clearRect(
-    0,
-    0,
-    ctx.canvas.width,
-    ctx.canvas.height
-  );
+    ctx.clearRect(
+      0,
+      0,
+      ctx.canvas.width,
+      ctx.canvas.height
+    );
 
-  lastPointRef.current.clear();
+    lastPointRef.current.clear();
 
-  strokesRef.current = [];
+    strokesRef.current = [];
 
-  await supabase
-    .from("whiteboard_events" as any)
-    .delete()
-    .eq("room_id", roomId);
+    const { error: clearError } = await supabase
+      .from("whiteboard_events" as any)
+      .delete()
+      .eq("room_id", roomId);
 
-  broadcastEvent({
-    type: "clear",
-    payload: {},
-  });
-};
+    if (clearError) {
+      console.error("Clear board failed to sync:", clearError);
+      toast.error("Board could not be cleared on the server. Please try again.");
+    }
+
+    broadcastEvent({
+      type: "clear",
+      payload: {},
+    });
+  };
 
   return (
     <div
@@ -398,22 +413,20 @@ export default function Canvas({ roomId }: Props) {
       <div className="flex items-center gap-3 p-3 border-b border-slate-800 bg-slate-900">
         <button
           onClick={() => setTool("pen")}
-          className={`px-3 py-1 rounded text-sm ${
-            tool === "pen"
-              ? "bg-blue-600 text-white"
-              : "bg-slate-800 text-slate-300"
-          }`}
+          className={`px-3 py-1 rounded text-sm ${tool === "pen"
+            ? "bg-blue-600 text-white"
+            : "bg-slate-800 text-slate-300"
+            }`}
         >
           Pen
         </button>
 
         <button
           onClick={() => setTool("eraser")}
-          className={`px-3 py-1 rounded text-sm ${
-            tool === "eraser"
-              ? "bg-blue-600 text-white"
-              : "bg-slate-800 text-slate-300"
-          }`}
+          className={`px-3 py-1 rounded text-sm ${tool === "eraser"
+            ? "bg-blue-600 text-white"
+            : "bg-slate-800 text-slate-300"
+            }`}
         >
           Eraser
         </button>
@@ -426,56 +439,56 @@ export default function Canvas({ roomId }: Props) {
           }
           className="w-10 h-10 bg-transparent border-none"
         />
-       <div className="ml-auto flex items-center gap-2">
-  <button
-    onClick={undoLastStroke}
-    className="px-3 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700"
-  >
-    Undo
-  </button>
+        <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={undoLastStroke}
+            className="px-3 py-1 rounded text-sm bg-slate-800 text-slate-300 hover:bg-slate-700"
+          >
+            Undo
+          </button>
 
-  {user?.id === hostId && (
-    <button
-      onClick={clearBoard}
-      className="px-3 py-1 rounded text-sm bg-red-600 text-white hover:bg-red-700"
-    >
-      Clear
-    </button>
-  )}
-</div>
+          {user?.id === hostId && (
+            <button
+              onClick={clearBoard}
+              className="px-3 py-1 rounded text-sm bg-red-600 text-white hover:bg-red-700"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       <canvas
         ref={canvasRef}
         className="flex-1 w-full h-full cursor-crosshair touch-none"
-       onMouseDown={startDrawing}
-onMouseMove={draw}
-onMouseUp={stopDrawing}
-onMouseLeave={stopDrawing}
+        onMouseDown={startDrawing}
+        onMouseMove={draw}
+        onMouseUp={stopDrawing}
+        onMouseLeave={stopDrawing}
 
-onTouchStart={(e) => {
-  e.preventDefault();
+        onTouchStart={(e) => {
+          e.preventDefault();
 
-  const touch = e.touches[0];
+          const touch = e.touches[0];
 
-  startDrawing({
-    clientX: touch.clientX,
-    clientY: touch.clientY,
-  } as any);
-}}
+          startDrawing({
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+          } as any);
+        }}
 
-onTouchMove={(e) => {
-  e.preventDefault();
+        onTouchMove={(e) => {
+          e.preventDefault();
 
-  const touch = e.touches[0];
+          const touch = e.touches[0];
 
-  draw({
-    clientX: touch.clientX,
-    clientY: touch.clientY,
-  } as any);
-}}
+          draw({
+            clientX: touch.clientX,
+            clientY: touch.clientY,
+          } as any);
+        }}
 
-onTouchEnd={stopDrawing}
+        onTouchEnd={stopDrawing}
       />
     </div>
   );
