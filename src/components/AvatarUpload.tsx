@@ -8,6 +8,13 @@ type AvatarUploadProps = {
   onUploadError: (error: string) => void;
 };
 
+const ALLOWED_AVATAR_TYPES = new Set([
+  "image/jpeg",
+  "image/png",
+  "image/gif",
+  "image/webp",
+]);
+
 export const AvatarUpload: React.FC<AvatarUploadProps> = ({
   currentAvatarUrl,
   onUploadSuccess,
@@ -22,7 +29,7 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
     const file = event.target.files?.[0];
     if (!file) return;
 
-    if (!file.type.startsWith("image/")) {
+    if (!ALLOWED_AVATAR_TYPES.has(file.type)) {
       onUploadError(
         "Please select a valid image file (JPG, PNG, GIF, or WebP)."
       );
@@ -121,7 +128,7 @@ export const AvatarUpload: React.FC<AvatarUploadProps> = ({
       <input
         type="file"
         ref={fileInputRef}
-        accept="image/*"
+        accept="image/jpeg,image/png,image/gif,image/webp"
         onChange={handleFileChange}
         className="hidden"
       />
