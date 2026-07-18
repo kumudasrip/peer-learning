@@ -308,7 +308,11 @@ export const conductMockInterview = async (req, res, next) => {
     }
 
     for (const m of messages) {
-      if (m.role !== "user" && m.role !== "assistant") {
+      if (
+        !m ||
+        typeof m !== "object" ||
+        (m.role !== "user" && m.role !== "assistant")
+      ) {
         return res.status(400).json({ error: "Messages can only contain user or assistant roles." });
       }
     }
