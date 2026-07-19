@@ -1,1 +1,1 @@
-// issue 1108
+export { ThemeProvider, useTheme } from "@/contexts/ThemeContext";

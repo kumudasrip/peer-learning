@@ -5,6 +5,8 @@ import { API_BASE_URL } from "@/config/api";
 import { toast } from "sonner";
 import { Loader2, Send, Bot, User, CheckCircle2, AlertTriangle, ArrowRight } from "lucide-react";
 import { MarkdownRenderer } from "@/components/MarkdownRenderer";
+import { ResizablePanelGroup, ResizablePanel, ResizableHandle } from "@/components/ui/resizable";
+import { CodeEditor } from "@/components/CodeEditor";
 
 type Message = {
   role: "system" | "user" | "assistant";
@@ -19,12 +21,12 @@ type Report = {
 };
 
 const ROLES = [
-  "Senior Frontend Engineer",
-  "Backend Developer",
+  "Frontend Engineer",
+  "Backend Engineer",
   "Full Stack Engineer",
   "Data Scientist",
   "Product Manager",
-  "HR Manager (Behavioral)",
+  "Engineering Manager",
 ];
 
 const getAccessToken = async (): Promise<string | null> => {
@@ -42,6 +44,7 @@ const MockInterview = () => {
   const [loading, setLoading] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [report, setReport] = useState<Report | null>(null);
+  const [reportError, setReportError] = useState<string | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
@@ -114,10 +117,13 @@ const MockInterview = () => {
 
     setIsFinished(true);
     setGeneratingReport(true);
+    setReportError(null);
     try {
       const token = await getAccessToken();
       if (!token) {
-        toast.error("Session expired. Please log in again.");
+        const message = "Session expired. Please log in again.";
+        toast.error(message);
+        setReportError(message);
         setGeneratingReport(false);
         return;
       }
@@ -138,6 +144,7 @@ const MockInterview = () => {
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : "Failed to generate evaluation report.";
       toast.error(message);
+      setReportError(message);
     } finally {
       setGeneratingReport(false);
     }
@@ -249,7 +256,16 @@ const MockInterview = () => {
               </div>
             </div>
           ) : (
-            <p className="text-center text-red-400">Failed to load report. Please try again.</p>
+            <div className="flex flex-col items-center gap-4 rounded-2xl border border-red-500/20 bg-red-500/10 p-8 text-center">
+              <p className="text-red-300">{reportError || "Failed to load report. Please try again."}</p>
+              <button
+                onClick={endInterview}
+                disabled={generatingReport}
+                className="bg-slate-800 hover:bg-slate-700 disabled:opacity-50 px-6 py-3 rounded-xl font-medium transition-colors"
+              >
+                Try Again
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -258,7 +274,7 @@ const MockInterview = () => {
 
   return (
     <div className="min-h-screen bg-[#020617] text-slate-100 pt-20 pb-24 px-4">
-      <div className="max-w-4xl mx-auto flex flex-col h-[calc(100vh-8rem)] bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
+      <div className="max-w-7xl w-full mx-auto flex flex-col h-[calc(100vh-8rem)] bg-slate-900 border border-slate-800 rounded-2xl overflow-hidden shadow-2xl">
         {/* Header */}
         <div className="bg-slate-950 border-b border-slate-800 p-4 flex justify-between items-center">
           <div className="flex items-center gap-3">
@@ -278,72 +294,80 @@ const MockInterview = () => {
           </button>
         </div>
 
-        {/* Chat Area */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-6">
-          {messages.map((msg, idx) => {
-            if (idx === 0 && msg.role === "user") return null;
-            const isAI = msg.role === "assistant" || msg.role === "system";
-            return (
-              <div key={idx} className={`flex gap-4 ${isAI ? "" : "flex-row-reverse"}`}>
-                <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isAI ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-500/20 text-blue-400"}`}>
-                  {isAI ? <Bot size={16} /> : <User size={16} />}
+        <ResizablePanelGroup direction="horizontal" className="flex-1 min-h-0">
+          <ResizablePanel defaultSize={40} minSize={30} className="flex flex-col">
+            {/* Chat Area */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-6">
+              {messages.map((msg, idx) => {
+                if (idx === 0 && msg.role === "user") return null;
+                const isAI = msg.role === "assistant" || msg.role === "system";
+                return (
+                  <div key={idx} className={`flex gap-4 ${isAI ? "" : "flex-row-reverse"}`}>
+                    <div className={`w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${isAI ? "bg-cyan-500/20 text-cyan-400" : "bg-blue-500/20 text-blue-400"}`}>
+                      {isAI ? <Bot size={16} /> : <User size={16} />}
+                    </div>
+                    <div className={`max-w-[80%] rounded-2xl px-5 py-3 ${isAI ? "bg-slate-800 rounded-tl-none text-slate-200" : "bg-blue-600 rounded-tr-none text-white"}`}>
+                      <MarkdownRenderer content={msg.content} />
+                    </div>
+                  </div>
+                );
+              })}
+              {loading && (
+                <div className="flex gap-4">
+                  <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0 text-cyan-400">
+                    <Bot size={16} />
+                  </div>
+                  <div className="bg-slate-800 rounded-2xl rounded-tl-none px-5 py-3 text-slate-400 flex items-center gap-2">
+                    <Loader2 size={16} className="animate-spin" />
+                    Interviewer is typing...
+                  </div>
                 </div>
-                <div className={`max-w-[80%] rounded-2xl px-5 py-3 ${isAI ? "bg-slate-800 rounded-tl-none text-slate-200" : "bg-blue-600 rounded-tr-none text-white"}`}>
-                  <MarkdownRenderer content={msg.content} />
-                </div>
-              </div>
-            );
-          })}
-          {loading && (
-            <div className="flex gap-4">
-              <div className="w-8 h-8 rounded-full bg-cyan-500/20 flex items-center justify-center shrink-0 text-cyan-400">
-                <Bot size={16} />
-              </div>
-              <div className="bg-slate-800 rounded-2xl rounded-tl-none px-5 py-3 text-slate-400 flex items-center gap-2">
-                <Loader2 size={16} className="animate-spin" />
-                Interviewer is typing...
-              </div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
-          )}
-          <div ref={messagesEndRef} />
-        </div>
 
-        {/* Input Area */}
-        <div className="p-4 bg-slate-950 border-t border-slate-800">
-          {/* --- FIX: form onSubmit calls submitAnswer directly, no event needed --- */}
-          <form
-            onSubmit={(e) => {
-              e.preventDefault();
-              submitAnswer();
-            }}
-            className="flex gap-3"
-          >
-            <textarea
-              value={inputValue}
-              onChange={(e) => setInputValue(e.target.value)}
-              placeholder="Type your answer..."
-              disabled={loading}
-              className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-500 resize-none min-h-[50px] max-h-32 text-slate-200 disabled:opacity-50"
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
+            {/* Input Area */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 shrink-0">
+              <form
+                onSubmit={(e) => {
                   e.preventDefault();
-                  // --- FIX: call submitAnswer() directly, no event passed ---
                   submitAnswer();
-                }
-              }}
-            />
-            <button
-              type="submit"
-              disabled={!inputValue.trim() || loading}
-              className="w-12 shrink-0 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 rounded-xl flex items-center justify-center text-white transition-colors"
-            >
-              <Send size={20} />
-            </button>
-          </form>
-          <p className="text-xs text-slate-500 text-center mt-2">
-            Press Enter to send, Shift+Enter for new line.
-          </p>
-        </div>
+                }}
+                className="flex gap-3"
+              >
+                <textarea
+                  value={inputValue}
+                  onChange={(e) => setInputValue(e.target.value)}
+                  placeholder="Type your answer..."
+                  disabled={loading}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-4 py-3 focus:outline-none focus:border-cyan-500 resize-none min-h-[50px] max-h-32 text-slate-200 disabled:opacity-50"
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" && !e.shiftKey) {
+                      e.preventDefault();
+                      submitAnswer();
+                    }
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={!inputValue.trim() || loading}
+                  className="w-12 shrink-0 bg-cyan-600 hover:bg-cyan-500 disabled:bg-slate-800 disabled:text-slate-500 rounded-xl flex items-center justify-center text-white transition-colors"
+                >
+                  <Send size={20} />
+                </button>
+              </form>
+              <p className="text-xs text-slate-500 text-center mt-2">
+                Press Enter to send, Shift+Enter for new line.
+              </p>
+            </div>
+          </ResizablePanel>
+
+          <ResizableHandle withHandle />
+
+          <ResizablePanel defaultSize={60} minSize={30}>
+            <CodeEditor />
+          </ResizablePanel>
+        </ResizablePanelGroup>
       </div>
     </div>
   );

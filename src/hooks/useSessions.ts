@@ -91,17 +91,42 @@ export function useSessions(user: any) {
     }
   }, [filteredSessions, selectedTab, selectedSession]);
 
+  // Reset per-session UI state immediately whenever the selected session
+  // changes (or is cleared):
+  // - participantCount: without this, switching sessions can briefly show
+  //   the previous session's headcount until the new session's presence
+  //   sync event comes in and overwrites it with the real number.
+  // - sessionSummary: without this, a summary generated for a previous
+  //   video session can keep showing after switching to a different
+  //   session, making it look like it belongs to the new one.
+  // - messages: without this, the previous session's thread stays rendered
+  //   for the whole fetch round-trip after switching.
+  useEffect(() => {
+    setParticipantCount(1);
+    setSessionSummary(null);
+    setMessages([]);
+  }, [selectedSession]);
+
   useEffect(() => {
     if (!selectedSession) return;
 
     const fetchMessages = async () => {
-      const { data } = await (supabase as any)
+      const { data, error } = await (supabase as any)
         .from("messages")
         .select("*")
         .eq("session_id", selectedSession.id)
         .order("created_at", { ascending: true });
 
-      setMessages(data || []);
+      if (error) {
+        console.error("Failed to fetch session messages:", error);
+        toast({
+          title: "Failed to load messages",
+          description: "Could not load session messages. Please try again.",
+          variant: "destructive",
+        });
+      } else {
+        setMessages(data || []);
+      }
     };
 
     fetchMessages();
@@ -117,7 +142,7 @@ export function useSessions(user: any) {
     channelRef.current = roomChannel;
 
     roomChannel
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages" }, (payload: any) => {
+      .on("postgres_changes", { event: "INSERT", schema: "public", table: "messages", filter: `session_id=eq.${selectedSession.id}` }, (payload: any) => {
         if (payload.new.session_id === selectedSession.id) {
           setMessages((prev) => [...prev, payload.new]);
         }
@@ -223,6 +248,10 @@ export function useSessions(user: any) {
       } else {
         toast({ title: "Success! 🎉", description: "You have joined the session." });
 
+        // Only award XP here, after join_session has actually succeeded and
+        // confirmed the user as a participant. This is the single source of
+        // truth for "session_join" XP — handleJoinVideo must NOT award it,
+        // since opening the video does not by itself confirm participation.
         if (!existingParticipant) {
           awardedSessionsRef.current.add(sessionId);
           awardXP({ activity: "session_join" });
@@ -317,13 +346,14 @@ export function useSessions(user: any) {
     }
   }, [selectedSession, messages]);
 
+  // NOTE: This no longer awards "session_join" XP. Opening the video call is
+  // not proof of confirmed participation — only a successful `join_session`
+  // RPC call (handled in handleJoinSession) confirms that, so that's the
+  // only place XP is granted. This closes the XP-farming hole where a user
+  // could click "Join Video" without ever clicking "Join Session".
   const handleJoinVideo = useCallback(() => {
     setIsVideoActive(true);
-    if (selectedSession && !awardedSessionsRef.current.has(selectedSession.id)) {
-      awardedSessionsRef.current.add(selectedSession.id);
-      awardXP({ activity: 'session_join' });
-    }
-  }, [awardXP, selectedSession]);
+  }, []);
 
   return {
     sessions,

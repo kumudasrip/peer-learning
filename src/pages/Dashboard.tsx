@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-import { Suspense, lazy, useEffect, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import RecommendationPanel from "@/components/recommendations/RecommendationPanel";
@@ -24,6 +24,7 @@ interface Profile {
   rating: number | null;
   sessions_completed: number | null;
   points: number | null;
+  streak: number | null;
   badges: string[] | null;
   learning_style: string | null;
   availability: string | null;
@@ -74,6 +75,47 @@ const Dashboard = () => {
     user?.email?.split("@")[0] ||
     "Learner";
 
+  // Recommended Peers
+  const fetchRecommendedPeers = useCallback(async (myProfile: Profile) => {
+    if (!user?.id) return;
+
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) return;
+
+      const res = await fetch(`${API_BASE_URL}/api/match/supabase-discover?limit=3`, {
+        headers: {
+          Authorization: `Bearer ${session.access_token}`
+        },
+        credentials:"include"
+      });
+      
+      const data = await res.json();
+      
+      if (data.success && data.recommendations) {
+        const mapped = data.recommendations.map((p: any) => ({
+          id: p.id,
+          name: p.name || "User",
+          avatar: p.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${p.name}`,
+          bio: p.bio || "",
+          skills: p.skills ?? [],
+          interests: p.interests ?? [],
+          teachSubjects: p.teach_subjects ?? [],
+          learnSubjects: p.learn_subjects ?? [],
+          rating: p.rating ?? 0,
+          sessionsCompleted: p.sessions_completed ?? 0,
+          points: p.points ?? 0,
+          badges: p.badges ?? [],
+          matchScore: p.score ?? 0,
+        }));
+        
+        setRecommendedPeers(mapped);
+      }
+    } catch (err) {
+      console.error("Failed to fetch recommended peers:", err);
+    }
+  }, [user]);
+
   // Fetch Profile
   useEffect(() => {
     if (!user) return;
@@ -99,7 +141,7 @@ const Dashboard = () => {
 
 
     fetchProfile();
-  }, [user]);
+  }, [user, fetchRecommendedPeers]);
 
   // Activity Feed — derive from sessions joined, resources uploaded, and study rooms joined
   useEffect(() => {
@@ -118,7 +160,7 @@ const Dashboard = () => {
           supabase
             .from("resources")
             .select("title, created_at")
-            .eq("user_id", user.id)
+            .eq("uploaded_by", user.id)
             .order("created_at", { ascending: false })
             .limit(3),
           supabase
@@ -159,47 +201,6 @@ const Dashboard = () => {
     fetchActivity();
   }, [user]);
 
-  // Recommended Peers
-  const fetchRecommendedPeers = async (myProfile: Profile) => {
-    if (!user?.id) return;
-
-    try {
-      const { data: { session } } = await supabase.auth.getSession();
-      if (!session) return;
-
-      const res = await fetch(`${API_BASE_URL}/api/match/supabase-discover?limit=3`, {
-        headers: {
-          Authorization: `Bearer ${session.access_token}`
-        },
-        credentials:"include"
-      });
-      
-      const data = await res.json();
-      
-      if (data.success && data.recommendations) {
-        const mapped = data.recommendations.map((p: any) => ({
-          id: p.id,
-          name: p.name || "User",
-          avatar: p.avatar_url || `https://api.dicebear.com/9.x/avataaars/svg?seed=${p.name}`,
-          bio: p.bio || "",
-          skills: p.skills ?? [],
-          interests: p.interests ?? [],
-          teachSubjects: p.teach_subjects ?? [],
-          learnSubjects: p.learn_subjects ?? [],
-          rating: p.rating ?? 0,
-          sessionsCompleted: p.sessions_completed ?? 0,
-          points: p.points ?? 0,
-          badges: p.badges ?? [],
-          matchScore: p.score ?? 0,
-        }));
-        
-        setRecommendedPeers(mapped);
-      }
-    } catch (err) {
-      console.error("Failed to fetch recommended peers:", err);
-    }
-  };
-
   const handleConnect = async (peerId: string) => {
     if (!user || connectedPeerIds.has(peerId)) return;
     // Optimistic update prevents duplicate inserts from double-clicks
@@ -220,7 +221,7 @@ const Dashboard = () => {
     }
     const { error: notifError } = await (supabase as any).from("notifications").insert({
       user_id: peerId,
-      type: "connection_request",
+      type: "system",
       body: `${profile?.name || "Someone"} wants to connect with you!`,
     });
     if (notifError) {
@@ -240,7 +241,7 @@ const Dashboard = () => {
       const { data, error } = await supabase
         .from("sessions")
         .select("*")
-        .eq("status", "upcoming")
+        .eq("status", "scheduled")
         .or(`mentor_id.eq.${user.id},student_id.eq.${user.id}`)
         .limit(4);
 
@@ -366,7 +367,7 @@ const Dashboard = () => {
 
               <div className="mt-6 flex flex-wrap gap-4">
                 <div className="rounded-2xl border border-orange-400/20 bg-orange-400/8 px-5 py-3 backdrop-blur-xl text-orange-300 text-sm font-medium">
-                  🔥 {profile?.sessions_completed || 0} Day Streak
+                  🔥 {profile?.streak || 0} Day Streak
                 </div>
                 <div className="rounded-2xl border border-indigo-400/20 bg-indigo-400/8 px-5 py-3 backdrop-blur-xl text-indigo-300 text-sm font-medium">
                   ⚡ {profile?.points || 0} XP
@@ -401,15 +402,15 @@ const Dashboard = () => {
           <div className="md:col-span-2 xl:col-span-3 space-y-6">
             {[
               {
-                label: "Sessions Joined",
-                value: upcomingSessions.length || 0,
+                label: "Sessions Completed",
+                value: profile?.sessions_completed || 0,
                 icon: "📚",
                 gradient: "from-cyan-400 to-indigo-500",
                 glow: "rgba(34,211,238,0.2)",
               },
               {
                 label: "Study Hours",
-                value: `${(profile?.sessions_completed || 0) * 2}h`,
+                value: `${Math.round((profile?.focus_time_this_week || 0) / 60)}h`,
                 icon: "⏰",
                 gradient: "from-indigo-400 to-purple-500",
                 glow: "rgba(99,102,241,0.2)",

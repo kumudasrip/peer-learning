@@ -1,8 +1,11 @@
+/* eslint-disable react-refresh/only-export-components */
 import {
   createContext,
   ReactNode,
   useContext,
+  useCallback,
   useEffect,
+  useMemo,
   useState,
 } from "react";
 
@@ -83,7 +86,7 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
     void fetchRoleProfile();
   }, [user, loading]);
 
-  const setMode = (mode: UserMode) => {
+  const setMode = useCallback((mode: UserMode) => {
     setCurrentMode(mode);
 
     if (isDualRole && hasFunctionalConsent()) {
@@ -93,14 +96,15 @@ export const RoleProvider = ({ children }: { children: ReactNode }) => {
         // ignore storage access failures
       }
     }
-  };
+  }, [isDualRole]);
+
+  const contextValue = useMemo(
+    () => ({ currentMode, isMentor, isLearner, isDualRole, setMode }),
+    [currentMode, isMentor, isLearner, isDualRole, setMode]
+  );
 
   return (
-    <RoleContext.Provider
-      value={{ currentMode, isMentor, isLearner, isDualRole, setMode }}
-    >
-      {children}
-    </RoleContext.Provider>
+    <RoleContext.Provider value={contextValue}>{children}</RoleContext.Provider>
   );
 };
 

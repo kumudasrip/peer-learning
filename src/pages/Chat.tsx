@@ -18,22 +18,6 @@ type Profile = {
   avatar_url?: string | null;
 };
 
-type UserRow = Profile;
-
-const mergeUsers = (profiles: Profile[], users: UserRow[]) => {
-  const map = new Map<string, Profile>();
-
-  for (const user of users) {
-    map.set(user.id, user);
-  }
-
-  for (const profile of profiles) {
-    map.set(profile.id, profile);
-  }
-
-  return Array.from(map.values());
-};
-
 type ChatMessage = {
   id: string;
   sender_id: string | null;
@@ -179,28 +163,17 @@ const Chat = () => {
     const loadUsers = async () => {
       setLoadingUsers(true);
 
-      const [{ data: profileData }, { data: userData }] = await Promise.all([
-        supabase
-          .from("profiles")
-          .select("*")
-          .neq("id", currentUser.id)
-          .order("name", { ascending: true })
-          .limit(100),
-        supabase
-          .from("profiles")
-          .select("*")
-          .neq("id", currentUser.id)
-          .order("name", { ascending: true })
-          .limit(100),
-      ]);
+      const { data: profileData } = await supabase
+        .from("profiles")
+        .select("*")
+        .neq("id", currentUser.id)
+        .order("name", { ascending: true })
+        .limit(100);
 
-      const mergedUsers = mergeUsers(
-        (profileData ?? []) as Profile[],
-        (userData ?? []) as UserRow[]
-      );
+      const nextUsers = (profileData ?? []) as Profile[];
 
-      setUsers(mergedUsers);
-      setSelectedUser((current) => current ?? mergedUsers[0] ?? null);
+      setUsers(nextUsers);
+      setSelectedUser((current) => current ?? nextUsers[0] ?? null);
 
       setLoadingUsers(false);
     };
@@ -398,7 +371,7 @@ const Chat = () => {
         isTyping,
       },
     });
-  }, []);
+  }, [currentUser?.id, selectedUser?.id]);
 
   const handleMessageChange = useCallback((value: string) => {
     setMessageText(value);
