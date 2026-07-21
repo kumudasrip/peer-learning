@@ -1,6 +1,6 @@
 import React, { useEffect, Suspense, useState, useRef } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Routes, Route, Navigate, Router } from "react-router-dom";
+import { BrowserRouter, Routes, Route, Navigate, Router, useLocation } from "react-router-dom";
 
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -24,6 +24,7 @@ import MouseSparkles from "./components/MouseSparkles";
 import BackToTop from "./components/BackToTop";
 import { useAuth } from "@/contexts/useAuth";
 import SplashScreen from "./components/SplashScreen";
+import ErrorBoundary from "./components/ErrorBoundary";
 
 
 
@@ -103,8 +104,7 @@ function AppContent() {
       <MouseSparkles />
       <CookieConsentBanner />
 
-      <Suspense fallback={<div className="flex min-h-screen items-center justify-center bg-[#020617]"><div className="h-10 w-10 animate-spin rounded-full border-4 border-cyan-400 border-t-transparent" /></div>}>
-        <Routes>
+      <Routes>
           <Route
             path="/"
             element={user ? <Navigate to="/dashboard" replace /> : <WithNav><Index /></WithNav>}
@@ -349,6 +349,15 @@ function AppContent() {
           />
 
           <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <Settings />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
             path="/anonymous-doubts"
             element={
               <ProtectedRoute>
@@ -371,8 +380,7 @@ function AppContent() {
           />
 
           <Route path="*" element={<NotFound />} />
-        </Routes>
-      </Suspense>
+      </Routes>
 
       {user && (
         <>
