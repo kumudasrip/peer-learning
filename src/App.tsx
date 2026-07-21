@@ -69,6 +69,7 @@ const MockInterview = React.lazy(() => import("./pages/MockInterview"));
 const TermsAndConditions = React.lazy(
   () => import("./pages/TermsAndConditions")
 );
+const AllReviews = React.lazy(() => import("./pages/AllReviews"));
 
 const queryClient = new QueryClient();
 
@@ -127,6 +128,7 @@ function AppContent() {
           <Route path="/become-mentor" element={<BecomeMentor />} />
           <Route path="/portfolio/:slug" element={<PublicPortfolio />} />
           <Route path="/contact" element={<WithNav><Contact /></WithNav>} />
+          <Route path="/reviews" element={<WithNav><AllReviews /></WithNav>} />
           <Route path="/privacy-policy" element={<WithNav><PrivacyPolicy /></WithNav>} />
           <Route path="/cookies-policy" element={<WithNav><CookiesPolicy /></WithNav>} />
            <Route path="/terms-and-conditions" element={<WithNav><TermsAndConditions /></WithNav>} />
