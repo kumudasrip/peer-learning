@@ -70,11 +70,14 @@ export function useSessions(user: any) {
   const filteredSessions = useMemo(() => {
     let filtered = sessions;
 
+    // Derive allowed statuses from the single source of truth: TAB_TO_STATUS
     const allowedStatuses = TAB_TO_STATUS[selectedTab] || [];
+
     filtered = filtered.filter((s) =>
       allowedStatuses.includes(s.status?.toLowerCase())
     );
 
+    // Apply search if present
     if (search) {
       filtered = filtered.filter(
         (s) =>
