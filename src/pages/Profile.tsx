@@ -168,7 +168,7 @@ if (profile.bio.length > MAX_BIO_CHARS) {
               <AvatarUpload
                 currentAvatarUrl={profile.avatar_url}
                 onUploadSuccess={(url) => setProfile({ ...profile, avatar_url: url })}
-                onUploadError={(error) => alert(error)}
+                onUploadError={(error) => toast.error(error)}
               />
             </div>
 
