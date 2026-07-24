@@ -4,6 +4,7 @@ import fs from "fs";
 import crypto from "crypto";
 import { getSupabaseAdmin } from "../utils/supabase.js";
 import { HttpError } from "../utils/httpError.js";
+import { fileTypeFromFile } from "file-type";
 
 // Ensure files do not exceed 50MB
 const MAX_FILE_SIZE = 50 * 1024 * 1024;
@@ -102,6 +103,61 @@ export const handleUpload = async (req, res, next) => {
     if (!preset || !preset.mimetypes.has(file.mimetype)) {
       fs.unlinkSync(file.path);
       throw new HttpError(400, "Invalid destination folder or file type.");
+    }
+
+    // Additional Server-Side Content Validation
+    const detectedType = await fileTypeFromFile(file.path);
+
+    if (detectedType) {
+      // The file has a recognized binary signature.
+      // If the detected type is in our preset, it's safe.
+      // Exception: docx files are zip archives and might be detected as such. 
+      // If the client claims docx and it's a zip, we keep docx to maintain the extension.
+      let isAllowed = preset.mimetypes.has(detectedType.mime);
+      let finalMime = detectedType.mime;
+
+      if (detectedType.mime === "application/zip" && file.mimetype === "application/vnd.openxmlformats-officedocument.wordprocessingml.document") {
+        isAllowed = true;
+        finalMime = file.mimetype;
+      }
+
+      if (!isAllowed) {
+        fs.unlinkSync(file.path);
+        throw new HttpError(400, `File content (${detectedType.mime}) is not allowed for this folder.`);
+      }
+
+      file.mimetype = finalMime;
+    } else {
+      // The file-type library could not recognize the signature (common for plain text).
+      // Verify that the client-provided mimetype is indeed a text type we allow.
+      const allowedTextTypes = new Set([
+        "text/plain",
+        "text/markdown",
+        "text/javascript",
+        "text/x-python",
+        "application/x-python-code",
+        "application/typescript",
+      ]);
+
+      if (!allowedTextTypes.has(file.mimetype)) {
+        fs.unlinkSync(file.path);
+        throw new HttpError(400, "Unrecognized file signature for binary format, or invalid text type.");
+      }
+
+      // To prevent masquerading binary files as text, check for null bytes in the first 4KB
+      const fd = fs.openSync(file.path, 'r');
+      const buffer = Buffer.alloc(4096);
+      let bytesRead = 0;
+      try {
+        bytesRead = fs.readSync(fd, buffer, 0, 4096, 0);
+      } finally {
+        fs.closeSync(fd);
+      }
+      
+      if (buffer.subarray(0, bytesRead).includes(0x00)) {
+        fs.unlinkSync(file.path);
+        throw new HttpError(400, "File claims to be text but contains binary data.");
+      }
     }
 
     const userId = req.user?.id;
